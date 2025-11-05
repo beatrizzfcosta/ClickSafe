@@ -1,115 +1,155 @@
 """
-Exemplo de uso do banco de dados ClickSafe - validar o schema e o db.py.
+Aplicação ClickSafe - Análise de URLs com integração ao banco de dados.
 """
+import asyncio
+import json
+from urllib.parse import urlparse
 from storage.db import (
     init_db,
     insert_analysis,
     insert_reputation_check,
-    insert_heuristic_hit,
     get_analysis_by_url,
     get_full_analysis,
     get_analyses_stats
 )
-import json
+from services.reputation import consolidate_reputation
 
 
-def example_usage():
-    """Exemplo de como usar o banco de dados."""
+def normalize_url(url: str) -> str:
+    """
+    Normaliza uma URL para comparação e armazenamento.
+    Remove trailing slash, converte host para lowercase, etc.
+    """
+    parsed = urlparse(url)
+    # Normaliza o host para lowercase
+    normalized_host = parsed.netloc.lower()
+    # Remove trailing slash do path (exceto se for apenas /)
+    normalized_path = parsed.path.rstrip('/')
+    # Reconstrói a URL normalizada
+    normalized = f"{parsed.scheme}://{normalized_host}{normalized_path}"
+    if parsed.query:
+        normalized += f"?{parsed.query}"
+    if parsed.fragment:
+        normalized += f"#{parsed.fragment}"
+    return normalized
+
+
+def _reputation_status_to_db_status(status: str) -> str:
+    """
+    Converte o status da API de reputação para o formato do banco.
+    POSITIVE/NEGATIVE/UNKNOWN -> POSITIVE/NEGATIVE
+    """
+    if status == "POSITIVE":
+        return "POSITIVE"
+    elif status == "NEGATIVE":
+        return "NEGATIVE"
+    else:  # UNKNOWN
+        return "NEGATIVE"  # UNKNOWN é tratado como NEGATIVE no banco
+
+
+async def analyze_url(url: str) -> dict:
+    """
+    Analisa uma URL completa:
+    1. Consulta fontes de reputação (GSB real, VT/PT mockados)
+    2. Salva no banco de dados
+    3. Retorna o resultado completo
+    """
+    # Normaliza a URL
+    normalized_url = normalize_url(url)
     
-    # 1. Inicializar o banco de dados (executar apenas uma vez)
-    print(" Inicializando banco de dados...")
-    init_db()
+    # Verifica se já existe análise recente
+    existing = get_analysis_by_url(normalized_url)
+    if existing:
+        print(f"Análise existente encontrada (ID: {existing['id']})")
+        return get_full_analysis(existing['id'])
     
-    # 2. Normalizar URL (exemplo simples)
-    url = "https://example.com/path/"
-    normalized_url = url.lower().rstrip('/')
+    # Consulta fontes de reputação
+    print(f"Analisando URL: {url}")
+    print(f"Normalizada: {normalized_url}")
     
-    # 3. Verificar se já existe análise
-    existing_analysis = get_analysis_by_url(normalized_url)
-    if existing_analysis:
-        print(f" Análise existente encontrada (ID: {existing_analysis['id']})")
-        print(f" Score: {existing_analysis['score']}")
+    rep_result = await consolidate_reputation(url)
     
-    # 4. Simular uma nova análise
-    print("\nCriando nova análise...")
+    # Calcula score final (0-100)
+    # _score vem de 0.0-1.0, converter para 0-100
+    score = rep_result["_score"] * 100
+    
+    # Gera explicação básica (pode ser melhorada com IA depois)
+    gsb_status = rep_result["sources"]["GOOGLE_SAFE_BROWSING"]["status"]
+    explanation = f"Análise de reputação: Google Safe Browsing retornou {gsb_status}."
+    if rep_result["sources"]["VIRUSTOTAL"]["status"] == "UNKNOWN":
+        explanation += " VirusTotal e PhishTank ainda não configurados (mockados)."
+    
+    # Salva a análise no banco
+    print("Salvando no banco de dados...")
     analysis_id = insert_analysis(
         url=url,
         normalized_url=normalized_url,
-        score=75.5,
-        explanation="Esta URL apresenta alguns indicadores de risco moderados."
+        score=score,
+        explanation=explanation
     )
     print(f"Análise criada com ID: {analysis_id}")
     
-    # 5. Adicionar verificações de reputação
-    print("\nAdicionando verificações de reputação...")
+    # Salva cada verificação de reputação
+    print("Salvando verificações de reputação...")
+    for source_name, source_data in rep_result["sources"].items():
+        status = _reputation_status_to_db_status(source_data["status"])
+        raw_json = json.dumps(source_data)
+        reason = source_data.get("reason", "ok")
+        elapsed_ms = source_data.get("elapsed_ms")
+        
+        insert_reputation_check(
+            analysis_id=analysis_id,
+            source=source_name,
+            status=status,
+            raw_json=raw_json,
+            reason=reason,
+            elapsed_ms=elapsed_ms
+        )
+        print(f"   ✓ {source_name}: {status} ({reason})")
     
-    insert_reputation_check(
-        analysis_id=analysis_id,
-        source='GOOGLE_SAFE_BROWSING',
-        status='NEGATIVE',
-        raw_json=json.dumps({"status": "ok", "threats": []}),
-        reason='ok',
-        elapsed_ms=150
-    )
+    # Retorna análise completa
+    return get_full_analysis(analysis_id)
+
+
+async def main():
+    """Função principal para testar a análise."""
+    # Inicializa o banco de dados
+    print("📦 Inicializando banco de dados...")
+    init_db()
     
-    insert_reputation_check(
-        analysis_id=analysis_id,
-        source='VIRUSTOTAL',
-        status='NEGATIVE',
-        raw_json=json.dumps({"detections": 0, "total": 87}),
-        reason='ok',
-        elapsed_ms=320
-    )
+    # URLs de exemplo para testar
+    test_urls = [
+        "https://example.com",
+        "https://google.com",
+    ]
     
-    print("Verificações de reputação adicionadas")
+    for url in test_urls:
+        print("\n" + "="*60)
+        result = await analyze_url(url)
+        
+        if result:
+            print(f"\nResultado da análise:")
+            print(f"   ID: {result['id']}")
+            print(f"   URL: {result['url']}")
+            print(f"   Score: {result['score']:.2f}/100")
+            print(f"   Verificações: {len(result['reputation_checks'])}")
+            
+            print("\n🔍 Detalhes das verificações:")
+            for check in result['reputation_checks']:
+                elapsed = check.get('elapsed_ms')
+                elapsed_str = f"{elapsed}ms" if elapsed else "N/A"
+                print(f"   - {check['source']}: {check['status']} "
+                      f"({check.get('reason', 'N/A')}) "
+                      f"[{elapsed_str}]")
+        
+        print("\n" + "="*60)
     
-    # 6. Adicionar resultados de heurísticas
-    print("\nAdicionando resultados de heurísticas...")
-    
-    insert_heuristic_hit(
-        analysis_id=analysis_id,
-        type='DOMAIN_AGE',
-        severity='MEDIUM',
-        status='TRUE',
-        details='Domínio criado há 6 meses (risco moderado)'
-    )
-    
-    insert_heuristic_hit(
-        analysis_id=analysis_id,
-        type='PATH_LENGTH_EXCESSIVE',
-        severity='LOW',
-        status='TRUE',
-        details='Path com 45 caracteres'
-    )
-    
-    insert_heuristic_hit(
-        analysis_id=analysis_id,
-        type='DOMAIN_HAS_HTTPS',
-        severity='LOW',
-        status='FALSE',
-        details='HTTPS válido presente'
-    )
-    
-    print("Heurísticas adicionadas")
-    
-    # 7. Buscar análise completa
-    print("\nBuscando análise completa...")
-    full_analysis = get_full_analysis(analysis_id)
-    if full_analysis:
-        print(f"   URL: {full_analysis['url']}")
-        print(f"   Score: {full_analysis['score']}")
-        print(f"   Verificações de reputação: {len(full_analysis['reputation_checks'])}")
-        print(f"   Heurísticas acionadas: {sum(1 for h in full_analysis['heuristics_hits'] if h['status'] == 'TRUE')}")
-    
-    # 8. Ver estatísticas
+    # Mostra estatísticas
     print("\nEstatísticas do banco de dados:")
     stats = get_analyses_stats()
     for key, value in stats.items():
         print(f"   {key}: {value}")
-    
-    print("\nExemplo concluído!")
 
 
 if __name__ == "__main__":
-    example_usage()
-
+    asyncio.run(main())

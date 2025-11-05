@@ -1,8 +1,23 @@
+# Banco de dados SQLite
 clicksafe.db
 clicksafe.db-wal
 clicksafe.db-shm
 
-
+# Arquivos de ambiente
 .env.*
 .env
 .env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pyc
+
+# Ambientes virtuais
+venv/
+env/
+ENV/
+.venv
