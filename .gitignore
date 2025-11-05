@@ -1,0 +1,8 @@
+clicksafe.db
+clicksafe.db-wal
+clicksafe.db-shm
+
+
+.env.*
+.env
+.env.local
