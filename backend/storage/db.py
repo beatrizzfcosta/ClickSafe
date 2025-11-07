@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional, Dict, List, Any
 from contextlib import contextmanager
 from datetime import datetime
+from urllib.parse import urlparse
 
 
 # Caminho padrão do banco de dados
@@ -48,12 +49,68 @@ def init_db(db_path: str = DB_PATH, schema_path: Path = SCHEMA_PATH) -> None:
     db_path: Caminho para o arquivo do banco de dados
     schema_path: Caminho para o arquivo SQL com o schema
     """
+    from pathlib import Path as P
+    seed_path = P(__file__).parent / 'seed_heuristics.sql'
+    
     with open(schema_path, 'r', encoding='utf-8') as f:
         schema_sql = f.read()
     
     with get_db(db_path) as conn:
         conn.executescript(schema_sql)
+        
+        # Popular tabela heuristics
+        if seed_path.exists():
+            with open(seed_path, 'r', encoding='utf-8') as f:
+                seed_sql = f.read()
+            conn.executescript(seed_sql)
+        
         print(f"Banco de dados inicializado em: {db_path}")
+
+
+# ============================================
+# Funções auxiliares
+# ============================================
+
+def extract_hostname(url: str) -> str:
+    """Extrai o hostname de uma URL."""
+    try:
+        parsed = urlparse(url)
+        return parsed.netloc.lower() or parsed.path.split('/')[0]
+    except:
+        return url.split('/')[0] if '/' in url else url
+
+
+def get_or_create_link(
+    url: str,
+    normalized_url: str,
+    db_path: str = DB_PATH
+) -> int:
+    """
+    Busca ou cria um link no banco de dados.
+    
+    Args:
+        url: URL original
+        normalized_url: URL normalizada
+        
+    Returns:
+        ID do link
+    """
+    with get_db(db_path) as conn:
+        cursor = conn.cursor()
+        # Tentar buscar link existente
+        cursor.execute("SELECT id FROM links WHERE url_normalized = ?", (normalized_url,))
+        row = cursor.fetchone()
+        
+        if row:
+            return row[0]
+        
+        # Criar novo link
+        hostname = extract_hostname(normalized_url)
+        cursor.execute("""
+            INSERT INTO links (url, url_normalized, hostname)
+            VALUES (?, ?, ?)
+        """, (url, normalized_url, hostname))
+        return cursor.lastrowid
 
 
 # ============================================
@@ -79,12 +136,14 @@ def insert_analysis(
     Returns:
         ID da análise inserida
     """
+    link_id = get_or_create_link(url, normalized_url, db_path)
+    
     with get_db(db_path) as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO analyses (url, normalized_url, score, explanation)
-            VALUES (?, ?, ?, ?)
-        """, (url, normalized_url, score, explanation))
+            INSERT INTO analyses (link_id, score, explanation, last_analyzed_at)
+            VALUES (?, ?, ?, datetime('now'))
+        """, (link_id, score, explanation))
         return cursor.lastrowid
 
 
@@ -123,9 +182,9 @@ def insert_reputation_check(
 
 def insert_heuristic_hit(
     analysis_id: int,
-    type: str,
+    heuristic_code: str,
     severity: str,
-    status: str,
+    triggered: bool,
     details: Optional[str] = None,
     db_path: str = DB_PATH
 ) -> int:
@@ -134,9 +193,9 @@ def insert_heuristic_hit(
     
     Args:
         analysis_id: ID da análise relacionada
-        type: Tipo da heurística (ex: 'DOMAIN_AGE', 'PATH_LENGTH_EXCESSIVE')
+        heuristic_code: Código da heurística (ex: 'DOMAIN_AGE', 'PATH_LENGTH_EXCESSIVE')
         severity: Severidade ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')
-        status: Status ('TRUE', 'FALSE')
+        triggered: Se a heurística foi acionada (True/False)
         details: Detalhes adicionais (opcional)
         
     Returns:
@@ -144,11 +203,54 @@ def insert_heuristic_hit(
     """
     with get_db(db_path) as conn:
         cursor = conn.cursor()
+        # Buscar heuristic_id pelo code
+        cursor.execute("SELECT id FROM heuristics WHERE code = ?", (heuristic_code,))
+        heuristic_row = cursor.fetchone()
+        
+        if not heuristic_row:
+            raise ValueError(f"Heurística com código '{heuristic_code}' não encontrada")
+        
+        heuristic_id = heuristic_row[0]
+        triggered_int = 1 if triggered else 0
+        
         cursor.execute("""
-            INSERT INTO heuristics_hits 
-            (analysis_id, type, severity, status, details)
+            INSERT OR REPLACE INTO heuristics_hits 
+            (analysis_id, heuristic_id, severity, triggered, details)
             VALUES (?, ?, ?, ?, ?)
-        """, (analysis_id, type, severity, status, details))
+        """, (analysis_id, heuristic_id, severity, triggered_int, details))
+        return cursor.lastrowid
+
+
+def insert_ai_request(
+    analysis_id: int,
+    model: str,
+    prompt: str,
+    response: str,
+    risk_score: Optional[float] = None,
+    meta: Optional[str] = None,
+    db_path: str = DB_PATH
+) -> int:
+    """
+    Insere uma requisição de IA.
+    
+    Args:
+        analysis_id: ID da análise relacionada
+        model: Modelo de IA usado (ex: 'gpt-4', 'claude-3')
+        prompt: Prompt enviado à IA
+        response: Resposta da IA
+        risk_score: Score de risco calculado pela IA (0-100, opcional)
+        meta: Metadados adicionais em JSON (opcional)
+        
+    Returns:
+        ID da requisição inserida
+    """
+    with get_db(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO ai_requests 
+            (analysis_id, model, prompt, response, risk_score, meta)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (analysis_id, model, prompt, response, risk_score, meta))
         return cursor.lastrowid
 
 
@@ -158,14 +260,19 @@ def insert_heuristic_hit(
 
 def get_analysis_by_id(analysis_id: int, db_path: str = DB_PATH) -> Optional[Dict[str, Any]]:
     """
-    Busca uma análise pelo ID.
+    Busca uma análise pelo ID, incluindo informações do link.
     
     Returns:
-        Dicionário com os dados da análise ou None se não encontrado
+        Dicionário com os dados da análise e do link, ou None se não encontrado
     """
     with get_db(db_path) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM analyses WHERE id = ?", (analysis_id,))
+        cursor.execute("""
+            SELECT a.*, l.url, l.url_normalized, l.hostname
+            FROM analyses a
+            JOIN links l ON a.link_id = l.id
+            WHERE a.id = ?
+        """, (analysis_id,))
         row = cursor.fetchone()
         return dict(row) if row else None
 
@@ -175,14 +282,16 @@ def get_analysis_by_url(normalized_url: str, db_path: str = DB_PATH) -> Optional
     Busca a análise mais recente de uma URL normalizada.
     
     Returns:
-        Dicionário com os dados da análise ou None se não encontrado
+        Dicionário com os dados da análise e do link, ou None se não encontrado
     """
     with get_db(db_path) as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT * FROM analyses 
-            WHERE normalized_url = ? 
-            ORDER BY created_at DESC 
+            SELECT a.*, l.url, l.url_normalized, l.hostname
+            FROM analyses a
+            JOIN links l ON a.link_id = l.id
+            WHERE l.url_normalized = ? 
+            ORDER BY a.created_at DESC 
             LIMIT 1
         """, (normalized_url,))
         row = cursor.fetchone()
@@ -208,17 +317,41 @@ def get_reputation_checks(analysis_id: int, db_path: str = DB_PATH) -> List[Dict
 
 def get_heuristics_hits(analysis_id: int, db_path: str = DB_PATH) -> List[Dict[str, Any]]:
     """
-    Busca todos os resultados de heurísticas de uma análise.
+    Busca todos os resultados de heurísticas de uma análise, incluindo informações da heurística.
     
     Returns:
-        Lista de dicionários com os dados das heurísticas
+        Lista de dicionários com os dados das heurísticas e informações de referência
     """
     with get_db(db_path) as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT * FROM heuristics_hits 
+            SELECT 
+                hh.*,
+                h.code as heuristic_code,
+                h.name as heuristic_name,
+                h.category as heuristic_category,
+                h.description as heuristic_description
+            FROM heuristics_hits hh
+            JOIN heuristics h ON hh.heuristic_id = h.id
+            WHERE hh.analysis_id = ?
+            ORDER BY hh.severity DESC, hh.created_at
+        """, (analysis_id,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_ai_requests(analysis_id: int, db_path: str = DB_PATH) -> List[Dict[str, Any]]:
+    """
+    Busca todas as requisições de IA de uma análise.
+    
+    Returns:
+        Lista de dicionários com os dados das requisições de IA
+    """
+    with get_db(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM ai_requests 
             WHERE analysis_id = ?
-            ORDER BY severity DESC, created_at
+            ORDER BY created_at
         """, (analysis_id,))
         return [dict(row) for row in cursor.fetchall()]
 
@@ -228,7 +361,7 @@ def get_full_analysis(analysis_id: int, db_path: str = DB_PATH) -> Optional[Dict
     Busca uma análise completa com todas as informações relacionadas.
     
     Returns:
-        Dicionário com análise, verificações de reputação e heurísticas
+        Dicionário com análise, link, verificações de reputação, heurísticas e requisições de IA
     """
     analysis = get_analysis_by_id(analysis_id, db_path)
     if not analysis:
@@ -237,7 +370,8 @@ def get_full_analysis(analysis_id: int, db_path: str = DB_PATH) -> Optional[Dict
     return {
         **analysis,
         'reputation_checks': get_reputation_checks(analysis_id, db_path),
-        'heuristics_hits': get_heuristics_hits(analysis_id, db_path)
+        'heuristics_hits': get_heuristics_hits(analysis_id, db_path),
+        'ai_requests': get_ai_requests(analysis_id, db_path)
     }
 
 
@@ -270,8 +404,16 @@ def get_analyses_stats(db_path: str = DB_PATH) -> Dict[str, Any]:
         stats['total_reputation_checks'] = cursor.fetchone()[0]
         
         # Total de heurísticas acionadas
-        cursor.execute("SELECT COUNT(*) FROM heuristics_hits WHERE status = 'TRUE'")
+        cursor.execute("SELECT COUNT(*) FROM heuristics_hits WHERE triggered = 1")
         stats['total_heuristics_triggered'] = cursor.fetchone()[0]
+        
+        # Total de links únicos
+        cursor.execute("SELECT COUNT(*) FROM links")
+        stats['total_links'] = cursor.fetchone()[0]
+        
+        # Total de requisições de IA
+        cursor.execute("SELECT COUNT(*) FROM ai_requests")
+        stats['total_ai_requests'] = cursor.fetchone()[0]
         
         return stats
 

@@ -2,24 +2,44 @@ PRAGMA foreign_keys = ON;
 PRAGMA journal_mode = WAL;
 
 /* ======================================
-   1) Resultado agregado da análise
+   1) Tabela de Links (URLs normalizadas)
    ====================================== */
-CREATE TABLE IF NOT EXISTS analyses (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  url           TEXT    NOT NULL,
-  normalized_url TEXT   NOT NULL,                 -- ex.: sem trailing slash, lower em host
-  score         REAL    NOT NULL                  -- 0..100 (agregado)
-                  CHECK (score >= 0 AND score <= 100),
-  explanation   TEXT    NOT NULL,                 -- texto (IA explicativa)
-  created_at    DATETIME NOT NULL DEFAULT (datetime('now'))
+CREATE TABLE IF NOT EXISTS links (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  url             TEXT    NOT NULL,                 -- URL original
+  url_normalized  TEXT    NOT NULL,                 -- URL normalizada (sem trailing slash, lower em host)
+  hostname        TEXT    NOT NULL,                 -- Hostname extraído para consultas rápidas
+  created_at      DATETIME NOT NULL DEFAULT (datetime('now')),
+  
+  UNIQUE (url_normalized)
 );
 
-CREATE INDEX IF NOT EXISTS idx_analyses_normalized_url ON analyses (normalized_url);
-CREATE INDEX IF NOT EXISTS idx_analyses_created_at     ON analyses (created_at);
+CREATE INDEX IF NOT EXISTS idx_links_url_normalized ON links (url_normalized);
+CREATE INDEX IF NOT EXISTS idx_links_hostname       ON links (hostname);
+CREATE INDEX IF NOT EXISTS idx_links_created_at     ON links (created_at);
 
 
 /* ======================================
-   2) Fontes de reputação por análise
+   2) Resultado agregado da análise
+   ====================================== */
+CREATE TABLE IF NOT EXISTS analyses (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  link_id         INTEGER NOT NULL
+                    REFERENCES links(id) ON DELETE CASCADE,
+  score           REAL    NOT NULL                  -- 0..100 (agregado)
+                    CHECK (score >= 0 AND score <= 100),
+  explanation     TEXT    NOT NULL,                 -- texto (IA explicativa)
+  created_at      DATETIME NOT NULL DEFAULT (datetime('now')),
+  last_analyzed_at DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_analyses_link_id         ON analyses (link_id);
+CREATE INDEX IF NOT EXISTS idx_analyses_created_at      ON analyses (created_at);
+CREATE INDEX IF NOT EXISTS idx_analyses_last_analyzed   ON analyses (last_analyzed_at);
+
+
+/* ======================================
+   3) Fontes de reputação por análise
    ====================================== */
 CREATE TABLE IF NOT EXISTS reputation_checks (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,54 +69,64 @@ CREATE INDEX IF NOT EXISTS idx_reputation_checks_source   ON reputation_checks (
 
 
 /* ======================================
-   3) (Opcional) Heurísticas por análise
+   4) Tabela de referência de Heurísticas
+   ====================================== */
+CREATE TABLE IF NOT EXISTS heuristics (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  code              TEXT    NOT NULL UNIQUE,       -- ex.: 'DOMAIN_AGE', 'PATH_LENGTH_EXCESSIVE'
+  name              TEXT    NOT NULL,               -- nome legível
+  category          TEXT    NOT NULL,               -- ex.: 'DOMAIN', 'PATH', 'PARAMS', 'GENERAL'
+  description       TEXT    NOT NULL,               -- descrição da heurística
+  default_severity  TEXT    NOT NULL                -- 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'
+                    CHECK (default_severity IN ('LOW','MEDIUM','HIGH','CRITICAL')),
+  default_weight    REAL    NOT NULL                -- peso padrão para cálculo de score
+                    CHECK (default_weight >= 0 AND default_weight <= 1)
+);
+
+CREATE INDEX IF NOT EXISTS idx_heuristics_code     ON heuristics (code);
+CREATE INDEX IF NOT EXISTS idx_heuristics_category ON heuristics (category);
+
+
+/* ======================================
+   5) Heurísticas acionadas por análise
    ====================================== */
 CREATE TABLE IF NOT EXISTS heuristics_hits (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   analysis_id   INTEGER NOT NULL
                   REFERENCES analyses(id) ON DELETE CASCADE,
-
-  type          TEXT    NOT NULL CHECK (type IN (
-                  'DOMAIN_AGE',
-                  'DOMAIN_EXPIRATION',
-                  'DOMAIN_TLD_RISK',
-                  'DOMAIN_IS_IP_ADDRESS',
-                  'DOMAIN_SIMILAR_TO_BRAND',
-                  'DOMAIN_SENSITIVE_KEYWORDS',
-                  'DOMAIN_MULTIPLE_SUBLEVELS',
-                  'DOMAIN_HYPHENS_USAGE',
-                  'DOMAIN_HAS_HTTPS',
-                  'DOMAIN_SSL_INVALID',
-                  'DOMAIN_DNS_ANOMALY',
-                  'DOMAIN_REVERSE_LOOKUP_FAIL',
-                  'DOMAIN_GEOLOCATION_RISK',
-                  'PATH_LENGTH_EXCESSIVE',
-                  'PATH_COMPLEXITY_HIGH',
-                  'PATH_ADMIN_DIRECTORIES',
-                  'PATH_FAKE_FILENAME',
-                  'PATH_DOUBLE_EXTENSION',
-                  'PATH_EXECUTABLE_DISGUISED',
-                  'PATH_SOCIAL_ENGINEERING_TERMS',
-                  'PARAMS_EXCESSIVE_NUMBER',
-                  'PARAMS_SENSITIVE_VARIABLES',
-                  'PARAMS_LONG_OR_ENCODED_VALUES',
-                  'PARAMS_REDIRECT_KEYWORD',
-                  'PARAMS_PERSONAL_DATA_INCLUDED',
-                  'SHORTENER_USAGE',
-                  'MULTIPLE_REDIRECTS',
-                  'EMBEDDED_PROTOCOLS',
-                  'LANGUAGE_MIX',
-                  'EMOJI_OR_SYMBOL_USAGE',
-                  'ATTRACTIVE_PHRASES',
-                  'KEYWORD_REPETITION',
-                  'BRAND_IMPERSONATION'
-                )),
+  heuristic_id  INTEGER NOT NULL
+                  REFERENCES heuristics(id) ON DELETE CASCADE,
 
   severity      TEXT    NOT NULL CHECK (severity IN ('LOW','MEDIUM','HIGH','CRITICAL')),
-  status        TEXT    NOT NULL CHECK (status IN ('TRUE','FALSE')),   -- heurística foi acionada?
-  details       TEXT,                                                   -- valores calculados, exemplos, etc.
+  triggered     INTEGER NOT NULL DEFAULT 0         -- 0 = não acionada, 1 = acionada
+                    CHECK (triggered IN (0, 1)),
+  details       TEXT,                               -- valores calculados, exemplos, etc.
+  created_at    DATETIME NOT NULL DEFAULT (datetime('now')),
+
+  UNIQUE (analysis_id, heuristic_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_heuristics_hits_analysis    ON heuristics_hits (analysis_id);
+CREATE INDEX IF NOT EXISTS idx_heuristics_hits_heuristic    ON heuristics_hits (heuristic_id);
+CREATE INDEX IF NOT EXISTS idx_heuristics_hits_triggered    ON heuristics_hits (triggered);
+
+
+/* ======================================
+   6) Requisições de IA por análise
+   ====================================== */
+CREATE TABLE IF NOT EXISTS ai_requests (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  analysis_id   INTEGER NOT NULL
+                  REFERENCES analyses(id) ON DELETE CASCADE,
+
+  model         TEXT    NOT NULL,                   -- ex.: 'gpt-4', 'claude-3', etc.
+  prompt        TEXT    NOT NULL,                   -- prompt enviado à IA
+  response      TEXT    NOT NULL,                   -- resposta da IA
+  risk_score    REAL,                               -- score de risco calculado pela IA (0..100)
+  meta          TEXT,                               -- metadados adicionais (JSON)
   created_at    DATETIME NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_heuristics_hits_analysis ON heuristics_hits (analysis_id);
-CREATE INDEX IF NOT EXISTS idx_heuristics_hits_type     ON heuristics_hits (type);
+CREATE INDEX IF NOT EXISTS idx_ai_requests_analysis ON ai_requests (analysis_id);
+CREATE INDEX IF NOT EXISTS idx_ai_requests_model    ON ai_requests (model);
+CREATE INDEX IF NOT EXISTS idx_ai_requests_created  ON ai_requests (created_at);

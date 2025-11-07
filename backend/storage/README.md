@@ -11,7 +11,9 @@ cd backend
 python init_db.py
 ```
 
-Isso criará o arquivo `clicksafe.db` (ou o caminho especificado em `CLICKSAFE_DB_PATH`) com todas as tabelas.
+Isso criará o arquivo `clicksafe.db` (ou o caminho especificado em `CLICKSAFE_DB_PATH`) com todas as tabelas e populará a tabela `heuristics` com os dados iniciais.
+
+**Nota:** Se já existir um banco de dados, ele será removido e recriado do zero.
 
 ## Uso Básico
 
@@ -51,10 +53,26 @@ from storage.db import insert_heuristic_hit
 
 insert_heuristic_hit(
     analysis_id=analysis_id,
-    type='DOMAIN_AGE',
-    severity='MEDIUM',  # 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'
-    status='TRUE',      # 'TRUE' ou 'FALSE'
+    heuristic_code='DOMAIN_AGE',  # Código da heurística (deve existir na tabela heuristics)
+    severity='MEDIUM',            # 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'
+    triggered=True,               # True se a heurística foi acionada, False caso contrário
     details='Domínio criado há 6 meses'
+)
+```
+
+### Adicionar requisição de IA
+
+```python
+from storage.db import insert_ai_request
+import json
+
+insert_ai_request(
+    analysis_id=analysis_id,
+    model='gpt-4',
+    prompt='Analise esta URL...',
+    response='A URL apresenta riscos...',
+    risk_score=75.5,  # Opcional: score de risco calculado pela IA (0-100)
+    meta=json.dumps({"tokens": 150, "temperature": 0.7})  # Opcional: metadados em JSON
 )
 ```
 
@@ -76,16 +94,18 @@ full = get_full_analysis(analysis_id)
 ## 🔧 Funções Disponíveis
 
 ### Inserção
-- `insert_analysis()` - Insere uma nova análise
+- `insert_analysis()` - Insere uma nova análise (cria link automaticamente se necessário)
 - `insert_reputation_check()` - Insere verificação de reputação
-- `insert_heuristic_hit()` - Insere resultado de heurística
+- `insert_heuristic_hit()` - Insere resultado de heurística (usa código da heurística)
+- `insert_ai_request()` - Insere requisição de IA
 
 ### Consulta
-- `get_analysis_by_id()` - Busca análise por ID
-- `get_analysis_by_url()` - Busca análise mais recente por URL normalizada
+- `get_analysis_by_id()` - Busca análise por ID (inclui informações do link)
+- `get_analysis_by_url()` - Busca análise mais recente por URL normalizada (inclui informações do link)
 - `get_reputation_checks()` - Lista verificações de reputação de uma análise
-- `get_heuristics_hits()` - Lista resultados de heurísticas de uma análise
-- `get_full_analysis()` - Busca análise completa com todas as informações relacionadas
+- `get_heuristics_hits()` - Lista resultados de heurísticas de uma análise (inclui informações da heurística)
+- `get_ai_requests()` - Lista requisições de IA de uma análise
+- `get_full_analysis()` - Busca análise completa com todas as informações relacionadas (link, reputação, heurísticas e IA)
 
 ### Estatísticas
 - `get_analyses_stats()` - Retorna estatísticas do banco de dados
