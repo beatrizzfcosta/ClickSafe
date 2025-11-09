@@ -1,5 +1,17 @@
 # Google Safe Browsing service
-from .gsb import check_gsb
+from .gsb import (
+    SafeBrowsing,
+    SafeBrowsingException,
+    SafeBrowsingInvalidApiKey,
+    SafeBrowsingPermissionDenied,
+    SafeBrowsingWeirdError,
+)
 
-__all__ = ['check_gsb']
+__all__ = [
+    'SafeBrowsing',
+    'SafeBrowsingException',
+    'SafeBrowsingInvalidApiKey',
+    'SafeBrowsingPermissionDenied',
+    'SafeBrowsingWeirdError',
+]
 

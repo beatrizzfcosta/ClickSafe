@@ -57,10 +57,17 @@ A chave será exibida no formato: `AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`
 
 #### 1. Instalar Dependências
 
+** Usando ambiente virtual **
+
 ```bash
-cd backend
-pip install httpx python-dotenv
+cd backend/services
+python3 -m venv venv
+source venv/bin/activate  # No macOS/Linux
+# ou: venv\Scripts\activate  # No Windows
+pip install -r requirements.txt
 ```
+
+
 
 Ou usando o arquivo de requirements:
 
@@ -184,9 +191,27 @@ Consolida resultados de múltiplas fontes de reputação.
 
 #### 1. Teste via CLI
 
+**Com ambiente virtual ativado:**
+
+```bash
+cd backend/services
+source venv/bin/activate  # Ativar o venv
+python gsb/test_gsb_cli.py https://google.com # "malicious":false
+python gsb/test_gsb_cli.py http://malware.testing.google.test/testing/malware/ # "malicious":true
+```
+
+**Ou usando o Python do venv diretamente:**
+
+```bash
+cd backend/services
+venv/bin/python gsb/test_gsb_cli.py https://example.com
+```
+
+**Sem ambiente virtual:**
+
 ```bash
 cd backend
-python services/test_gsb_cli.py https://example.com
+python services/gsb/test_gsb_cli.py https://example.com
 ```
 
 **Saída esperada:**
@@ -277,16 +302,34 @@ Para implementar PhishTank:
 
 - `httpx>=0.24.0`: Cliente HTTP assíncrono para requisições
 - `python-dotenv>=1.0.0`: Carregamento de variáveis de ambiente do `.env.local`
+- `requests>=2.31.0`: Cliente HTTP síncrono (usado pelo módulo GSB)
 
 ---
 
 ## Troubleshooting
 
-### Erro: `ModuleNotFoundError: No module named 'httpx'`
+### Erro: `ModuleNotFoundError: No module named 'httpx'` ou `módulo 'requests' não encontrado`
+
+**Solução 1: Usar ambiente virtual (recomendado)**
 
 ```bash
-pip install httpx python-dotenv
+cd backend/services
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ```
+
+**Solução 2: Instalar globalmente**
+
+```bash
+pip install httpx python-dotenv requests
+```
+
+**Solução 3: Se estiver usando Python do Homebrew**
+
+O Python do Homebrew requer ambiente virtual. Siga a Solução 1 acima.
+
+**Nota**: Se você estiver usando conda, certifique-se de que o ambiente está ativado ou use o Python do Homebrew com venv.
 
 ### Erro: `"reason": "no_key"`
 

@@ -1,122 +1,175 @@
-import os
-import time
-from pathlib import Path
-from typing import Dict, Any
-import httpx
-from urllib.parse import urlparse, urlunparse
+import json
+import requests
+from .about import __version__  
 
-# carrega .env (igual ao teu)
-try:
-    from dotenv import load_dotenv
-    env_path = Path(__file__).parent.parent.parent / '.env.local'
-    if env_path.exists():
-        load_dotenv(env_path)
-except ImportError:
+
+class SafeBrowsingException(Exception):
+    """Exceção base genérica para erros do Safe Browsing."""
     pass
 
-GSB_API_KEY = os.getenv("GSB_API_KEY", "")
 
-def _payload(url: str) -> Dict[str, Any]:
-    return {
-        "client": {"clientId": "clicksafe", "clientVersion": "1.0"},
-        "threatInfo": {
-            "threatTypes": [
-                "MALWARE",
-                "SOCIAL_ENGINEERING",
-                "UNWANTED_SOFTWARE",
-                "POTENTIALLY_HARMFUL_APPLICATION",
-            ],
-            "platformTypes": ["ANY_PLATFORM"],
-            "threatEntryTypes": ["URL"],
-            "threatEntries": [{"url": url}],
-        },
-    }
+class SafeBrowsingInvalidApiKey(SafeBrowsingException):
+    """Erro lançado quando a chave da API fornecida é inválida."""
+    def __init__(self):
+        Exception.__init__(self, "Invalid API key for Google Safe Browsing")
 
-async def expand_url(url: str, timeout: float = 10.0) -> str:
+
+class SafeBrowsingPermissionDenied(SafeBrowsingException):
+    """Erro lançado quando o acesso à API é negado (ex: chave sem permissão)."""
+    def __init__(self, detail):
+        Exception.__init__(self, detail)
+
+
+class SafeBrowsingWeirdError(SafeBrowsingException):
+    """Erro genérico para outros problemas inesperados com a API."""
+    def __init__(self, code, status, message):
+        # Monta uma mensagem mais detalhada
+        self.message = "%s(%i): %s" % (status, code, message)
+        Exception.__init__(self, self.message)
+
+
+def chunks(lst, n):
     """
-    Expande redirecionamentos (bit.ly, etc) e devolve a URL final.
-    Se falhar, devolve a URL original.
+    Divide uma lista em blocos (sublistas) de tamanho n.
+
+    Exemplo:
+        chunks([1, 2, 3, 4, 5], 2) -> [[1, 2], [3, 4], [5]]
     """
-    try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
-            # HEAD costuma ser suficiente e menos pesado; alguns encurtadores rejeitam HEAD -> fallback para GET
-            r = await client.head(url, allow_redirects=True)
-            final = r.url if r.status_code < 400 else r.url
-            # se HEAD falhar, tenta GET
-            if r.status_code >= 400:
-                r2 = await client.get(url, allow_redirects=True)
-                final = r2.url
-            return str(final)
-    except Exception:
-        return url
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
 
-def canonicalize_url(u: str) -> str:
+
+class SafeBrowsing(object):
     """
-    Canonicalização simples:
-     - lowercase scheme e host,
-     - remove fragment,
-     - remove default ports,
-     - garante path (/) se vazio.
-    NOTA: o Safe Browsing tem regras próprias mais complexas (hashing, etc).
+    Classe responsável por consultar a API do Google Safe Browsing.
+
+    Parâmetros:
+        key (str): chave da API (GSB API key)
+        api_url (str): URL base da API (padrão da versão 4)
     """
-    p = urlparse(u)
-    scheme = (p.scheme or "http").lower()
-    netloc = p.hostname.lower() if p.hostname else ""
-    if p.port and not (p.scheme == "http" and p.port == 80 or p.scheme == "https" and p.port == 443):
-        netloc += f":{p.port}"
-    path = p.path or "/"
-    # remove fragment
-    normalized = urlunparse((scheme, netloc, path, "", p.query, ""))
-    return normalized
 
-async def check_gsb(url: str, use_test_url: bool = False) -> Dict[str, Any]:
-    """
-    Faz:
-     1) expande encurtadores e segue redirects
-     2) canonicaliza a URL
-     3) chama threatMatches:find
-    """
-    if not GSB_API_KEY:
-        return {"status": "UNKNOWN", "reason": "no_key", "raw": {}}
+    def __init__(self, key,
+                 api_url='https://safebrowsing.googleapis.com/v4/threatMatches:find'):
+        self.api_key = key
+        self.api_url = api_url
 
-    # Opcional: URL de teste conhecida para validar request (deve sempre dar match)
-    if use_test_url:
-        # Exemplo de teste: MALWARE. (verifica docs/testsafebrowsing)
-        url_to_check = "http://testsafebrowsing.appspot.com/apiv4/ANY_PLATFORM/MALWARE/URL"
-    else:
-        # expandir e canonicalizar
-        expanded = await expand_url(url, timeout=8.0)
-        url_to_check = canonicalize_url(expanded)
 
-    endpoint = "https://safebrowsing.googleapis.com/v4/threatMatches:find"
-    params = {"key": GSB_API_KEY}
-    body = _payload(url_to_check)
+    def lookup_urls(self, urls, platforms=["ANY_PLATFORM"]):
+        """
+        Verifica múltiplas URLs na API do Google Safe Browsing.
 
-    t0 = time.perf_counter()
-    try:
-        # timeout maior para dar tempo a resolver DNS e redirecionamentos
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            r = await client.post(endpoint, params=params, json=body)
-        elapsed = int((time.perf_counter() - t0) * 1000)
+        Argumentos:
+            urls (list[str]): lista de URLs a verificar
+            platforms (list[str]): lista de plataformas a considerar (padrão: "ANY_PLATFORM")
 
-        if r.status_code == 200:
-            data = r.json()
-            has_match = bool(data.get("matches"))
-            return {
-                "status": "POSITIVE" if has_match else "NEGATIVE",
-                "reason": "ok",
-                "raw": data if has_match else {},
-                "elapsed_ms": elapsed,
-                "checked_url": url_to_check,
-                "expanded_from": url if url != url_to_check else None,
+        Retorna:
+            dict: dicionário com resultados no formato:
+                  { "url": {"malicious": bool, ...}, ... }
+        """
+
+        results = {}
+
+        # Divide as URLs em blocos de 25 (limite máximo da API por requisição)
+        for urll in chunks(urls, 25):
+            # Monta o corpo (payload) da requisição
+            safe_browsing_request = {
+                "client": {
+                    "clientId": "pysafebrowsing",       # nome do cliente
+                    "clientVersion": __version__         # versão atual do pacote
+                },
+                "threatInfo": {
+                    "threatTypes": [                    # tipos de ameaças a verificar
+                        "MALWARE",
+                        "SOCIAL_ENGINEERING",
+                        "THREAT_TYPE_UNSPECIFIED",
+                        "UNWANTED_SOFTWARE",
+                        "POTENTIALLY_HARMFUL_APPLICATION"
+                    ],
+                    "platformTypes": platforms,          # plataformas alvo
+                    "threatEntryTypes": ["URL"],         # tipo de entrada (URL)
+                    "threatEntries": [{'url': u} for u in urll]  # lista de URLs
+                }
             }
-        # retorna motivo HTTP para debugging
-        return {
-            "status": "UNKNOWN",
-            "reason": f"http_{r.status_code}",
-            "raw": {"text": r.text[:1000]},
-        }
-    except httpx.ReadTimeout:
-        return {"status": "UNKNOWN", "reason": "timeout", "raw": {}}
-    except Exception as e:
-        return {"status": "UNKNOWN", "reason": f"error:{type(e).__name__}", "raw": {}}
+
+            headers = {'Content-type': 'application/json'}
+
+            # Faz o POST para a API do Google Safe Browsing
+            r = requests.post(
+                self.api_url,
+                data=json.dumps(safe_browsing_request),           # converte o corpo para JSON
+                params={'key': self.api_key},    # inclui a chave da API nos parâmetros
+                headers=headers
+            )
+
+            # Tratamento de resposta
+            if r.status_code == 200:
+                # 200 = sucesso
+                data = r.json()
+                matches_data = data.get('matches', [])
+                
+                if not matches_data:
+                    # Nenhuma ameaça encontrada → todas seguras
+                    results.update(dict([(u, {"malicious": False}) for u in urll]))
+                else:
+                    # Existem correspondências de ameaças ("matches")
+                    for url in urll:
+                        # Filtra os matches correspondentes à URL atual
+                        matches = [match for match in matches_data
+                                   if match.get('threat', {}).get('url') == url]
+
+                        if len(matches) > 0:
+                            # Caso a URL tenha sido marcada como maliciosa
+                            cache_durations = [b.get("cacheDuration") for b in matches if b.get("cacheDuration")]
+                            result = {
+                                'malicious': True,
+                                # Lista de plataformas afetadas (sem duplicatas)
+                                'platforms': list(set([b.get('platformType', '') for b in matches])),
+                                # Tipos de ameaças encontrados (sem duplicatas)
+                                'threats': list(set([b.get('threatType', '') for b in matches])),
+                            }
+                            # Duração mínima do cache (se disponível)
+                            if cache_durations:
+                                result['cache'] = min(cache_durations)
+                            results[url] = result
+                        else:
+                            # URL sem ameaças detectadas
+                            results[url] = {"malicious": False}
+
+            else:
+
+                # Tratamento de erros HTTP
+                if r.status_code == 400:
+                    print(r.json())
+                    # Erro 400: requisição inválida (ex: chave incorreta)
+                    if r.json()['error']['message'] == 'API key not valid. Please pass a valid API key.':
+                        raise SafeBrowsingInvalidApiKey()
+                    else:
+                        raise SafeBrowsingWeirdError(
+                            r.json()['error']['code'],
+                            r.json()['error']['status'],
+                            r.json()['error']['message'],
+                        )
+                elif r.status_code == 403:
+                    # Erro 403: acesso negado (sem permissão)
+                    raise SafeBrowsingPermissionDenied(r.json()['error']['message'])
+                else:
+                    # Outros erros HTTP genéricos
+                    raise SafeBrowsingWeirdError(r.status_code, "", "")
+
+        return results
+
+    # Método: lookup_url
+
+    def lookup_url(self, url, platforms=["ANY_PLATFORM"]):
+        """
+        Consulta uma única URL na API (modo simples).
+
+        Argumentos:
+            url (str): URL a verificar
+            platforms (list[str]): plataformas alvo
+
+        Retorna:
+            dict: resultado no formato {"malicious": bool, ...}
+        """
+        r = self.lookup_urls([url], platforms=platforms)
+        return r[url]
