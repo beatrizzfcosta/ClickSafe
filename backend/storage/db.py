@@ -417,3 +417,27 @@ def get_analyses_stats(db_path: str = DB_PATH) -> Dict[str, Any]:
         
         return stats
 
+
+def clear_all_data(db_path: str = DB_PATH) -> None:
+    """
+    Limpa todos os dados das tabelas (exceto heuristics que são de referência).
+    Mantém a estrutura das tabelas intacta.
+    
+    Atenção: Esta função apaga TODOS os dados de análise!
+    """
+    with get_db(db_path) as conn:
+        cursor = conn.cursor()
+        
+        # Ordem importante devido às foreign keys
+        # Primeiro apaga dados dependentes
+        cursor.execute("DELETE FROM ai_requests")
+        cursor.execute("DELETE FROM heuristics_hits")
+        cursor.execute("DELETE FROM reputation_checks")
+        cursor.execute("DELETE FROM analyses")
+        cursor.execute("DELETE FROM links")
+        
+        # Reseta os contadores AUTOINCREMENT
+        cursor.execute("DELETE FROM sqlite_sequence WHERE name IN ('links', 'analyses', 'reputation_checks', 'heuristics_hits', 'ai_requests')")
+        
+        print(" Todas as tabelas de dados foram limpas (heuristics mantidas)")
+

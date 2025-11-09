@@ -1,6 +1,19 @@
 import json
+import os
+import time
 import requests
-from .about import __version__  
+from pathlib import Path
+from typing import Dict, Optional
+from .about import __version__
+
+# Carrega .env.local se existir
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).parent.parent.parent / '.env.local'
+    if env_path.exists():
+        load_dotenv(env_path)
+except ImportError:
+    pass  
 
 
 class SafeBrowsingException(Exception):
@@ -173,3 +186,92 @@ class SafeBrowsing(object):
         """
         r = self.lookup_urls([url], platforms=platforms)
         return r[url]
+
+
+async def check_gsb(url: str, timeout: int = 3) -> Dict:
+    """
+    Função assíncrona para verificar URL no Google Safe Browsing.
+    
+    Retorna formato padronizado:
+    {
+        "status": "POSITIVE" | "NEGATIVE" | "UNKNOWN",
+        "reason": "ok" | "no_key" | "timeout" | "error:...",
+        "raw": {...},  # Resposta completa da API
+        "elapsed_ms": int  # Tempo de resposta em milissegundos
+    }
+    
+    Args:
+        url: URL a verificar
+        timeout: Timeout em segundos (padrão: 3)
+        
+    Returns:
+        Dicionário com resultado padronizado
+    """
+    start_time = time.time()
+    
+    # Verifica se a API key está configurada
+    api_key = os.getenv("GSB_API_KEY", "")
+    if not api_key:
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        return {
+            "status": "UNKNOWN",
+            "reason": "no_key",
+            "raw": {},
+            "elapsed_ms": elapsed_ms
+        }
+    
+    try:
+        # Cria instância do SafeBrowsing
+        sb = SafeBrowsing(api_key)
+        
+        # Executa a verificação (síncrona, mas em contexto assíncrono)
+        # Em produção, pode ser melhor usar httpx para requisições assíncronas
+        result = sb.lookup_url(url)
+        
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        
+        # Converte resultado para formato padronizado
+        if result.get("malicious", False):
+            status = "POSITIVE"
+        else:
+            status = "NEGATIVE"
+        
+        return {
+            "status": status,
+            "reason": "ok",
+            "raw": result,
+            "elapsed_ms": elapsed_ms
+        }
+        
+    except SafeBrowsingInvalidApiKey:
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        return {
+            "status": "UNKNOWN",
+            "reason": "error:SafeBrowsingInvalidApiKey",
+            "raw": {},
+            "elapsed_ms": elapsed_ms
+        }
+    except SafeBrowsingPermissionDenied as e:
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        return {
+            "status": "UNKNOWN",
+            "reason": f"error:SafeBrowsingPermissionDenied:{str(e)}",
+            "raw": {},
+            "elapsed_ms": elapsed_ms
+        }
+    except SafeBrowsingWeirdError as e:
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        return {
+            "status": "UNKNOWN",
+            "reason": f"error:SafeBrowsingWeirdError:{e.message}",
+            "raw": {},
+            "elapsed_ms": elapsed_ms
+        }
+    except Exception as e:
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        return {
+            "status": "UNKNOWN",
+            "reason": f"error:{type(e).__name__}:{str(e)}",
+            "raw": {},
+            "elapsed_ms": elapsed_ms
+        }

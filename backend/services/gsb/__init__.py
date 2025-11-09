@@ -5,6 +5,7 @@ from .gsb import (
     SafeBrowsingInvalidApiKey,
     SafeBrowsingPermissionDenied,
     SafeBrowsingWeirdError,
+    check_gsb,
 )
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     'SafeBrowsingInvalidApiKey',
     'SafeBrowsingPermissionDenied',
     'SafeBrowsingWeirdError',
+    'check_gsb',
 ]
 
