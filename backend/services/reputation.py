@@ -1,6 +1,8 @@
 # backend/services/reputation.py
 from typing import Dict
 from .gsb import check_gsb
+from .vt import check_vt
+
 
 def _status_to_score(status: str) -> float:
     """
@@ -40,9 +42,8 @@ async def consolidate_reputation(url: str) -> Dict:
     
     # 2. GSB foi NEGATIVE, verifica VirusTotal
     print("  GSB não detectou ameaça - verificando VirusTotal...")
-    # TODO: Implementar check_vt quando estiver disponível
-    # vt = await check_vt(url)
-    vt = {"status": "UNKNOWN", "reason": "stub", "raw": {}}  # Stub por enquanto
+    
+    vt = await check_vt(url)
     sources["VIRUSTOTAL"] = vt
     
     # Se VirusTotal estiver implementado e for POSITIVE, retorna

@@ -9,8 +9,12 @@ Este módulo contém a implementação dos serviços de verificação de reputa�
    - [Configuração](#configuração)
    - [Implementação](#implementação)
    - [Uso](#uso)
-2. [VirusTotal e PhishTank](#virustotal-e-phishtank)
-3. [Estrutura de Arquivos](#estrutura-de-arquivos)
+2. [VirusTotal](#virustotal)
+   - [Obter Chave de API](#obter-chave-de-api-1)
+   - [Configuração do VirusTotal](#configuração-do-virustotal)
+   - [Implementação](#implementação-1)
+3. [PhishTank](#phishtank)
+4. [Estrutura de Arquivos](#estrutura-de-arquivos)
 
 ---
 
@@ -268,9 +272,70 @@ result = await analyze_url("https://example.com")
 
 ---
 
-## VirusTotal e PhishTank
+## VirusTotal
 
-Atualmente implementados como **stubs** (mockados), retornando sempre:
+### Obter Chave de API
+
+#### 1. Criar Conta no VirusTotal
+
+1. Acessar: https://www.virustotal.com/gui/join-us
+2. Preencher o formulário de registro:
+   - Email
+   - Senha
+   - Aceitar termos de uso
+3. Clicar em **Create Account**
+4. Verificar o email (verifique a caixa de spam se necessário)
+
+#### 2. Obter API Key
+
+1. Fazer login em: https://www.virustotal.com/gui/
+2. Clicar no seu perfil (canto superior direito)
+3. Selecionar **API key** no menu
+4. Copiar a chave de API exibida
+
+**Formato da chave**: Uma string longa de caracteres alfanuméricos (ex: `a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0`)
+
+**Importante**: 
+- A chave é pessoal e não deve ser compartilhada
+- Mantenha esta chave segura e nunca a commite no Git!
+- Planos gratuitos têm limites de requisições (geralmente 4 requisições/minuto)
+
+#### 3. Limites da API
+
+- **Free Tier**: 4 requisições por minuto
+- **Rate Limit**: 4 req/min (pode variar)
+- Para uso comercial ou maior volume, considere planos pagos
+
+---
+
+### Configuração do VirusTotal
+
+#### Adicionar API Key ao `.env.local`
+
+Editar o arquivo `.env.local` no diretório `backend/`:
+
+```bash
+# backend/.env.local
+VT_API_KEY=a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0
+```
+---
+
+### Implementação
+
+O módulo `vt.py` já está implementado e segue o mesmo padrão do GSB:
+
+- Função `check_vt(url)` que retorna formato padronizado
+- Carregamento automático da API key do `.env.local`
+- Tratamento de erros (rate limit, API key inválida, etc.)
+- Integração automática na verificação sequencial
+
+**Uso automático**: Quando o GSB retornar NEGATIVE, o sistema verificará automaticamente no VirusTotal (se a API key estiver configurada).
+
+---
+
+## PhishTank
+
+Atualmente implementado como **stub** (mockado), retornando sempre:
 
 ```python
 {
@@ -280,19 +345,10 @@ Atualmente implementados como **stubs** (mockados), retornando sempre:
 }
 ```
 
-### Próximos Passos
-
-Para implementar VirusTotal:
-
-1. Obter chave de API em: https://www.virustotal.com/gui/join-us
-2. Criar arquivo `vt.py` similar ao `gsb.py`
-3. Adicionar `VT_API_KEY` ao `.env.local`
-4. Atualizar `reputation.py` para chamar `check_vt()` em vez do stub
-
-Para implementar PhishTank:
+### Próximos Passos para PhishTank
 
 1. Obter chave de API em: https://www.phishtank.com/api_register.php
-2. Criar arquivo `pt.py` similar ao `gsb.py`
+2. Criar arquivo `pt.py` similar ao `gsb.py` e `vt.py`
 3. Adicionar `PT_API_KEY` ao `.env.local`
 4. Atualizar `reputation.py` para chamar `check_pt()` em vez do stub
 
