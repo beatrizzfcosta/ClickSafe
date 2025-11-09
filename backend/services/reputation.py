@@ -3,6 +3,13 @@ from typing import Dict
 from .gsb import check_gsb
 
 def _status_to_score(status: str) -> float:
+    """
+    Converte status de reputação para score numérico (0.0 = seguro, 1.0 = perigoso).
+    
+    - POSITIVE (malicioso): 1.0
+    - NEGATIVE (seguro/não malicioso): 0.0
+    - UNKNOWN (indeterminado): 0.5
+    """
     return {"POSITIVE": 1.0, "NEGATIVE": 0.0, "UNKNOWN": 0.5}.get(status, 0.5)
 
 async def consolidate_reputation(url: str) -> Dict:
