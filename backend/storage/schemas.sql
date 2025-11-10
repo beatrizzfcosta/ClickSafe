@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS reputation_checks (
                   REFERENCES analyses(id) ON DELETE CASCADE,
 
   source        TEXT    NOT NULL
-                  CHECK (source IN ('VIRUSTOTAL','PHISHTANK','GOOGLE_SAFE_BROWSING')),
+                  CHECK (source IN ('VIRUSTOTAL','APIVOID','GOOGLE_SAFE_BROWSING')),
 
   status        TEXT    NOT NULL
                   CHECK (status IN ('POSITIVE','NEGATIVE')),

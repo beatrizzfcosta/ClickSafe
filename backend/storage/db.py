@@ -161,7 +161,7 @@ def insert_reputation_check(
     
     Args:
         analysis_id: ID da análise relacionada
-        source: Fonte ('VIRUSTOTAL', 'PHISHTANK', 'GOOGLE_SAFE_BROWSING')
+        source: Fonte ('VIRUSTOTAL', 'APIVOID', 'GOOGLE_SAFE_BROWSING')
         status: Status ('POSITIVE', 'NEGATIVE')
         raw_json: Resposta JSON completa da API
         reason: Razão (opcional, ex: 'timeout', 'ok')
