@@ -743,19 +743,80 @@ def check_personal_data_parameters(parametros):
     return False  #nenhum parametro de dados pessoais encontrado
 
 #pequeno teste
-dominio, caminho, parametros = extract_url_components("https://www.example.com/page?email=user%40example.com&name=John")
-print(check_personal_data_parameters(parametros)) #--> True
-dominio, caminho, parametros = extract_url_components("https://www.example.com/page?id=123")
-print(check_personal_data_parameters(parametros)) #--> False
+#dominio, caminho, parametros = extract_url_components("https://www.example.com/page?email=user%40example.com&name=John")
+#print(check_personal_data_parameters(parametros)) #--> True
+#dominio, caminho, parametros = extract_url_components("https://www.example.com/page?id=123")
+#print(check_personal_data_parameters(parametros)) #--> False
 
 
 #-------------------Analise encurtadores e redirecionamentos --------------------
 
-#uso de servicos de encurtamento de URL (bit.ly, tinyurl) - pode ocultar o destino real
+# --- uso de servicos de encurtamento de URL (bit.ly, tinyurl) - pode ocultar o destino real ---
+URL_SHORTENERS = {
+    "bit.ly",
+    "tinyurl.com",
+    "goo.gl",
+    "ow.ly",
+    "t.co",
+    "is.gd",
+    "buff.ly",
+    "adf.ly",
+    "bit.do",
+    "cutt.ly",
+    "shorte.st",
+}
 
-#redirecionamentos multiples ou cadeias de redirecionamento
+def check_url_shortener(dominio):
+    #extrai o dominio base (dominio + sufixo)
+    ext = tldextract.extract(dominio)
+    dominio_base = f"{ext.domain}.{ext.suffix}"  # por exemplo "bit.ly"
 
-#urls com protocolos embutidos
+    return dominio_base in URL_SHORTENERS  #retorna True se for um encurtador conhecido
+
+#pequeno teste
+#dominio, caminho, parametros = extract_url_components("https://bit.ly/example")
+#print(check_url_shortener(dominio)) #--> True
+#dominio, caminho, parametros = extract_url_components("https://www.google.com/search?client=opera-gx&q=vscode+collaborative+coding&sourceid=opera&ie=UTF-8&oe=UTF-8")
+#print(check_url_shortener(dominio)) #--> False
+
+
+# --- redirecionamentos multiplos ou cadeias de redirecionamento ---
+
+
+#TODO reverrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr
+
+
+
+def check_multiple_redirects(url):
+    try:
+        resposta = requests.get(url, timeout=5)
+        #verifica o numero de redirecionamentos
+        num_redirects = len(resposta.history)
+        return num_redirects > 3  #retorna True se houver mais de 3 redirecionamentos
+    except Exception as e:
+        print(f"Erro ao verificar redirecionamentos: {e}")
+        return False  # tratamos de erros como "não foi detetada cadeia longa"
+    
+#pequeno teste
+#print(check_multiple_redirects("https://httpbin.org/redirect/6")) #--> False
+#print(check_multiple_redirects("https://www.google.com")) #--> False
+
+
+
+# --- urls com protocolos embutidos ---
+def check_embedded_protocols(url):
+    #verifica se ha protocolos embutidos na URL
+    protocolos = ["http://", "https://", "ftp://", "ftps://"]
+    count = 0
+    for protocolo in protocolos:
+        count += url.count(protocolo)
+    return count > 1  #retorna True se houver mais de 1 protocolo
+
+#pequenos testes
+
+#print(check_embedded_protocols("http://example.com/http://example.com")) #--> True
+#print(check_embedded_protocols("https://example.com/page")) #--> False
+
 
 
 #-------------------Padroes de engenharia social --------------------
