@@ -8,6 +8,7 @@ import urllib.parse  #para analisar URLs
 import requests  #para fazer requisições HTTP
 import ipaddress  #para verificar endereços IP
 from difflib import SequenceMatcher  #para comparar similaridade de strings - typosquatting
+import base64  #para verificar codificação base64
 
 
 #receber o url e extraior dominio, caminho, parametros
@@ -641,15 +642,111 @@ def check_social_engineering_path(caminho):
 
 #-------------------Analise dos parametros --------------------
 
-#uso excessivo de parametros na URL - numero excessivo
+# --- uso excessivo de parametros na URL - numero excessivo ---
+#assumimos que mais de 5 parametros é suspeito
+def check_excessive_parameters(parametros):
+    #divide os parametros pelo '&' e conta
+    params_list = parametros.split('&')
+    return len(params_list) > 5  #retorna True se for suspeito
+
+#pequeno teste
+#dominio, caminho, parametros = extract_url_components("https://www.google.com/search?client=opera-gx&q=vscode+collaborative+coding&sourceid=opera&ie=UTF-8&oe=UTF-8&param1=val1&param2=val2&param3=val3")
+#print(check_excessive_parameters(parametros)) #--> True
+#dominio, caminho, parametros = extract_url_components("https://www.google.com/search?client=opera-gx&q=vscode+collaborative+coding")
+#print(check_excessive_parameters(parametros)) #--> False
+
 
 #variaveis sensiveis (ex token, auth, sessionid) na URL
+SENSITIVE_PARAM_NAMES = {
+    "password", "pass", "pwd",
+    "token", "auth", "session",
+    "creditcard", "cc", "card", "pin",
+}
 
-#valores demasiado longos ou codificados
+def check_sensitive_parameters(parametros):
+    #divide os parametros pelo '&'
+    params_list = parametros.split('&')
 
-#parametros de redirecionamento
+    #verifica se algum dos parametros é sensivel
+    for param in params_list:
+        nome_param = param.split('=')[0].lower()  #nome do parametro
+        if nome_param in SENSITIVE_PARAM_NAMES:
+            return True  #parametro sensivel encontrado
+    return False  #nenhum parametro sensivel encontrado
 
-#inclusao de dados pessoasis (ex: nome, email) na URL
+#pequeno teste
+#dominio, caminho, parametros = extract_url_components("https://www.example.com/page?token=abc123&user=teste")
+#print(check_sensitive_parameters(parametros)) #--> True
+#dominio, caminho, parametros = extract_url_components("https://www.example.com/page?user=teste&id=456")
+#print(check_sensitive_parameters(parametros)) #--> False
+
+
+# --- valores demasiado longos ou codificados ---
+#asumimos que valores com mais de 100 caracteres ou que parecem codificados em base64 são suspeitos
+def check_long_encoded_parameters(parametros):
+    #divide os parametros pelo '&'
+    params_list = parametros.split('&')
+
+    for param in params_list:
+        valor_param = param.split('=')[1] 
+
+        #verifica se o valor é demasiado longo (mais de 100 caracteres)
+        if len(valor_param) > 100:
+            return True  #parametro com valor demasiado longo encontrado
+        
+        #verifica se o valor parece estar codificado em base64 (caracteres comuns)
+        if len(valor_param) % 4 == 0 and base64.b64decode(valor_param, validate=True):
+            return True  #parametro com valor possivelmente codificado encontrado
+    return False  #nenhum parametro suspeito encontrado
+
+#pequeno teste
+#dominio, caminho, parametros = extract_url_components("https://www.example.com/page?data=VGhpcyBpcyBhIHRlc3Qgc3RyaW5nIHdpdGggbW9yZSB0aGFuIDEwMCBjaGFyYWN0ZXJzIGFuZCBzb21lIG1vcmUgdGV4dCB0byBzZWUgaWYgdGhpcyB3b3Jrcw==")
+#print(check_long_encoded_parameters(parametros)) #--> True
+#dominio, caminho, parametros = extract_url_components("https://www.example.com/page?info=shortvalue")
+#print(check_long_encoded_parameters(parametros)) #--> False
+
+
+# --- parametros de redirecionamento ---
+REDIRECT_PARAM_NAMES = {"redirect", "url", "next", "dest", "destination", "goto"}
+def check_redirect_parameters(parametros):
+    #divide os parametros pelo '&'
+    params_list = parametros.split('&')
+
+    #verifica se algum dos parametros é de redirecionamento
+    for param in params_list:
+        nome_param = param.split('=')[0].lower()  #nome do parametro
+        if nome_param in REDIRECT_PARAM_NAMES:
+            return True  #parametro de redirecionamento encontrado
+    return False  #nenhum parametro de redirecionamento encontrado
+
+#pequeno teste
+#dominio, caminho, parametros = extract_url_components("https://www.example.com/page?redirect=https%3A%2F%2Fevil.com")
+#print(check_redirect_parameters(parametros)) #--> True
+#dominio, caminho, parametros = extract_url_components("https://www.example.com/page?user=teste")
+#print(check_redirect_parameters(parametros)) #--> False
+
+
+# --- inclusao de dados pessoais (ex: nome, email) na URL ---
+PERSONAL_DATA_PARAM_NAMES = {
+    "name", "fullname", "first_name", "last_name",
+    "email", "e-mail", "phone", "tel", "address",
+}
+def check_personal_data_parameters(parametros):
+    #divide os parametros pelo '&'
+    params_list = parametros.split('&')
+
+    #verifica se algum dos parametros é de dados pessoais
+    for param in params_list:
+        nome_param = param.split('=')[0].lower()  #nome do parametro
+        if nome_param in PERSONAL_DATA_PARAM_NAMES:
+            return True  #parametro de dados pessoais encontrado
+    return False  #nenhum parametro de dados pessoais encontrado
+
+#pequeno teste
+dominio, caminho, parametros = extract_url_components("https://www.example.com/page?email=user%40example.com&name=John")
+print(check_personal_data_parameters(parametros)) #--> True
+dominio, caminho, parametros = extract_url_components("https://www.example.com/page?id=123")
+print(check_personal_data_parameters(parametros)) #--> False
 
 
 #-------------------Analise encurtadores e redirecionamentos --------------------
