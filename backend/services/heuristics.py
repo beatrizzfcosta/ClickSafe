@@ -457,15 +457,187 @@ def check_suspicious_server_location(dominio):
 
 #-------------------Analise do caminho --------------------
 
-#uso de muitos subdiretorios ou caminhos longos
+# --- uso de muitos subdiretorios ou caminhos longos ---
+#assumimos que mais de 5 subdiretorios é suspeito
+def check_long_path(caminho):
+    #conta o numero de subdiretorios (partes entre barras)
+    subdirs = caminho.split('/')
+    return len(subdirs) > 5  #retorna True se houver mais de 5 subdiretorios
 
-#subdiretorios administrativos (ex: /admin/, /login/, /secure/) - nao devem estar acessiveis publicamente
+#pequenos testes
+#dominio, caminho, parametros = extract_url_components("https://www.google.com/a/b/c/d/e/f/g/h")
+#print(check_long_path(caminho)) #--> True
 
-#uso de palavras suspeitas no caminho (ex: "login", "secure", "update")
+#dominio, caminho, parametros = extract_url_components("https://www.google.com/a/b/c")
+#print(check_long_path(caminho)) #--> False
 
-#extensoes duplas ou executaveis disfarcadas (ex: .php.jpg, .exe)
 
-#termos de engenharia social no caminho 
+# --- subdiretorios administrativos (ex: /admin/, /secure/) - nao devem estar acessiveis publicamente ---
+ADMIN_PATH_KEYWORDS = {
+    "/admin",
+    "/administrator",
+    "/admin/login",
+    "/admin_panel",
+    "/backend",
+    "/backoffice",
+    "/manage",
+    "/management",
+    "/dashboard",
+    "/controlpanel",
+    "/cpanel",
+    "/login",
+    "/user/login",
+    "/auth",
+    "/signin",
+    "/secure/login",
+    "/wp-admin",
+    "/wp-login.php",
+    "/wp-admin/admin.php",
+    "/cms",
+    "/cms/admin",
+    "/admin.php",
+    "/phpmyadmin",
+    "/pma",
+    "/mysqladmin",
+    "/sqladmin",
+    "/dbadmin",
+    "/server-status",
+    "/server-info",
+    "/config",
+    "/configs",
+    "/configuration",
+    "/settings",
+    "/setup",
+    "/install",
+    "/installer",
+    "/update",
+    "/upgrade",
+    "/secret",
+    "/hidden",
+}
+
+def check_admin_paths(caminho):
+    sitios = caminho.split('/')  #remove parametros se existirem
+
+    #verifica se algum dos termos administrativos está presente no caminho
+    for termo in sitios:
+        if str("/")+termo in ADMIN_PATH_KEYWORDS:
+            return True  #caminho suspeito
+    return False  #caminho normal
+
+#pequenos testes
+#dominio, caminho, parametros = extract_url_components("https://www.example.com/admin/login")
+#print(check_admin_paths(caminho)) #--> True
+#dominio, caminho, parametros = extract_url_components("https://www.example.com/user/profile/configure")
+#print(check_admin_paths(caminho)) #--> False
+
+
+# ---nomes de ficheiros falsos ou apelativos---
+SUSPICIOUS_FILE_KEYWORDS = {
+    "login",
+    "signin",
+    "verify",
+    "verification",
+    "update",
+    "confirm",
+    "confirmation",
+    "password",
+    "pass",
+    "account",
+    "secure",
+    "security",
+    "bank",
+    "billing",
+}
+
+SUSPICIOUS_FILE_EXTENSIONS = {
+    "php",
+    "html",
+    "htm",
+    "asp",
+    "aspx",
+    "jsp",
+}
+
+def check_suspicious_filenames(caminho):
+    #extrai o nome do ficheiro (ultima parte do caminho)
+    partes = caminho.split('/')
+    nome_ficheiro = partes[-1]  #ultima parte do caminho
+
+    #verifica se o nome do ficheiro contem termos suspeitos
+    if nome_ficheiro.split('.')[0] in SUSPICIOUS_FILE_KEYWORDS and  nome_ficheiro.split('.')[1] in SUSPICIOUS_FILE_EXTENSIONS:
+        return True  #nome de ficheiro suspeito
+    return False  #nome de ficheiro normal
+
+#pequenos testes
+#dominio, caminho, parametros = extract_url_components("https://www.example.com/verify.php")
+#print(check_suspicious_filenames(caminho)) #--> True
+#dominio, caminho, parametros = extract_url_components("https://www.example.com/images/photo.jpg")
+#print(check_suspicious_filenames(caminho)) #--> False
+
+
+# --- executaveis disfarcadas (ex: .exe) ---
+EXECUTABLE_EXTS = {
+    ".exe", ".bat", ".cmd", ".scr",
+    ".js", ".jse", ".vbs", ".vbe",
+    ".ps1", ".psm1",
+    ".jar", ".com", ".msi",
+}
+
+def check_executable_extensions(caminho):
+    partes = caminho.split('/')
+    extensoes = partes[-1].split('.')  #ultima parte do caminho (nome do ficheiro)
+
+    if (str(".")+extensoes[-1]) in EXECUTABLE_EXTS:
+        return True  #extensao de executavel encontrada
+    else:
+        return False  #sem extensao dupla
+    
+#pequenos testes
+#dominio, caminho, parametros = extract_url_components("https://www.example.com/image.bat")
+#print(check_executable_extensions(caminho)) #--> True
+#dominio, caminho, parametros = extract_url_components("https://www.example.com/document.pdf")
+#print(check_executable_extensions(caminho)) #--> False
+
+
+# --- termos de engenharia social no caminho ---
+SOCIAL_ENGINEERING_KEYWORDS = {
+    "free",
+    "offer",
+    "click",
+    "here",
+    "urgent",
+    "limited",
+    "winner",
+    "prize",
+    "reward",
+    "bonus",
+    "cash",
+    "money",
+    "deal",
+    "save",
+    "now",
+    "subscribe",
+    "buy",
+    "purchase",
+    "discount",
+}
+def check_social_engineering_path(caminho):
+
+    partes = caminho.split('/')
+
+    #verifica se algum dos termos de engenharia social está presente no caminho
+    for termo in partes:
+        if termo in SOCIAL_ENGINEERING_KEYWORDS:
+            return True  #caminho suspeito
+    return False  #caminho normal   
+
+#pequenos testes
+#dominio, caminho, parametros = extract_url_components("https://www.example.com/free/prize/winner")
+#print(check_social_engineering_path(caminho)) #--> True
+#dominio, caminho, parametros = extract_url_components("https://www.example.com/user/profile")
+#print(check_social_engineering_path(caminho)) #--> False
+
 
 #-------------------Analise dos parametros --------------------
 
@@ -491,7 +663,7 @@ def check_suspicious_server_location(dominio):
 
 #-------------------Padroes de engenharia social --------------------
 
-#mistura de idiiomas
+#mistura de idiomas
 
 #uso de simbolos ou emojis na URL
 
