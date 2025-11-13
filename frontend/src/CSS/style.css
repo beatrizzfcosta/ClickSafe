@@ -1,0 +1,48 @@
+html, body, #root{
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100vh;
+}
+
+header {
+    background-color: #212842;
+}
+
+footer {
+    margin: 0;
+    background-color: #212842;
+    color: #F0E7D5;
+    padding: 20px 0;
+}
+
+.membros{
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px;
+
+}
+
+.seccao-membro{
+    padding: 5px 7px;
+    flex-grow: 0;
+}
+
+.header{
+    padding: 10px;
+    color: #F0E7D5;
+}
+
+.nav{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    color: #F0E7D5;
+}
+
+.nav input{
+    background-color: #F0E7D5;
+    flex-grow: 1;
+}
+
