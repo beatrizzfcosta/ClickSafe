@@ -6,6 +6,8 @@ import dns.resolver #para verificar registros DNS
 import ssl  #para verificar certificados SSL
 import urllib.parse  #para analisar URLs
 import requests  #para fazer requisições HTTP
+import ipaddress  #para verificar endereços IP
+from difflib import SequenceMatcher  #para comparar similaridade de strings - typosquatting
 
 
 #receber o url e extraior dominio, caminho, parametros
@@ -25,7 +27,8 @@ def extract_url_components(url):
 #-----------------------------------------------Analise do dominio---------------------------------------------------------
 
 
-#idade do dominio - verificar se é muito recente
+# ---idade do dominio - verificar se é muito recente ---
+
 #considerámos que dominios com menos de 30 dias são muto recentes
 def check_domain_age_recent(dominio):
     try:
@@ -50,7 +53,8 @@ def check_domain_age_recent(dominio):
         return None
 
 
-#idade do dominio - verificar se esta prestes a expirar 
+# --- idade do dominio - verificar se esta prestes a expirar ---
+
 #considerámos que dominios com menos de 30 dias para expirar são suspeitos    
 def check_domain_age_expiring(dominio):
     try:
@@ -81,30 +85,374 @@ def check_domain_age_expiring(dominio):
 #respostas:
 #print(check_domain_age_recent(dominio)) --> False
 #print(check_domain_age_expiring(dominio))--> False
-print (check_domain_age_expiring("zlnewb.bond"))
-print (check_domain_age_recent("zlnewb.bond"))
+#print (check_domain_age_expiring("zlnewb.bond"))--> False
+#print (check_domain_age_recent("zlnewb.bond"))--> True
 
 
 
-#dominios de nivel superior (TLD) suspeitos (.tk, .ml, .ga, .cf, .gq)
+# --- dominios de nivel superior (TLD) suspeitos (.tk, .ml, .ga, .cf, .gq) ---
+
+#definimos uma lista com os dominios suspeitos 
+TLD_SUSPEITOS = {"tk", "ml", "ga", "cf", "gq", "zip", "xyz", "top", "loan", "click", "info", "biz", "date", "win", "party", "link", "club",}
+
+def check_suspicious_tld(dominio):
+    #extrai o TLD usando biblioteca tldextract
+    tld = tldextract.extract(dominio).suffix
+
+    #retorna True se o TLD for suspeito - se estiver na lista
+    return tld in TLD_SUSPEITOS  #retorna True se o TLD for suspeito - se estiver na lista
+
+#pequeno teste
+#dominio, caminho, parametros = extract_url_components("https://www.google.com/search?client=opera-gx&q=vscode+collaborative+coding&sourceid=opera&ie=UTF-8&oe=UTF-8")
+#respostas:
+#print(check_suspicious_tld(dominio)) #--> False
+#print (check_suspicious_tld("zlnewb.top")) #--> True
 
 
-#Utiliza endereco IP em vez de nome de dominio
+
+# --- Utiliza endereco IP em vez de nome de dominio ---
+
+def check_ip_instead_of_domain(dominio):
+    #extrai o nome do dominio
+    nome_dominio = tldextract.extract(dominio).domain
+    #verifica se o dominio é um endereco IP
+    try:
+        ipaddress.ip_address(nome_dominio)
+        return True   # é um IP (IPv4 ou IPv6)
+    except ValueError:
+        return False  #nao é um endereco IP
+
+#pequeno teste
+#dominio, caminho, parametros = extract_url_components("https://www.google.com/search?client=opera-gx&q=vscode+collaborative+coding&sourceid=opera&ie=UTF-8&oe=UTF-8")
+#respostas:
+#print(check_ip_instead_of_domain(dominio)) #--> False
+#dominio, caminho, parametros = extract_url_components("http://192.168.1.10/login")
+#print (check_ip_instead_of_domain(dominio)) #--> True
 
 
-#Similaridade com dominios conhecidos (typosquatting)
+
+# --- Similaridade com dominios conhecidos (typosquatting) ---
+
+#lista de dominios conhecidos para comparar 
+# A heurística de ‘similaridade com domínios legítimos’ não tenta cobrir todos os domínios existentes, o que seria impraticável. 
+# Em vez disso, o sistema mantém uma lista limitada de domínios de alto valor (grandes marcas)
+DOMINIOS_CONHECIDOS = [
+    # Motores de busca / tech
+    "google.com",
+    "microsoft.com",
+    "apple.com",
+
+    # Email / contas
+    "gmail.com",
+    "outlook.com",
+    "live.com",
+    "hotmail.com",
+    "icloud.com",
+    "yahoo.com",
+
+    # Redes sociais / comunicação
+    "facebook.com",
+    "instagram.com",
+    "whatsapp.com",
+    "twitter.com",
+    "x.com",
+    "tiktok.com",
+    "linkedin.com",
+
+    # Pagamentos / dinheiro
+    "paypal.com",
+    "stripe.com",
+    "revolut.com",
+    "wise.com",
+    "millenniumbcp.pt",
+    "millennium.pt",
+    "cgd.pt",
+    "activobank.pt",
+    "novobanco.pt",
+    "montepio.pt",
+    "bancomontepio.pt",
+    "santander.pt",
+    "moey.pt",
+    "creditoagricola.pt",
+    "bancobpi.pt",
+
+    # Compras / serviços online
+    "amazon.com",
+    "ebay.com",
+    "aliexpress.com",
+    "netflix.com",
+    "spotify.com",
+    "discord.com",
+    "dropbox.com",
+]
+
+#calcula e devolve a similaridade entre duas strings - 0 significa nenhuma similaridade, 1 significa iguais
+def similar(a, b):
+    return SequenceMatcher(None, a, b).ratio()
+
+def check_similar_known_domains(dominio):
+    #extrai o dominio base (dominio + sufixo)
+    ext = tldextract.extract(dominio)
+    dominio_base = f"{ext.domain}.{ext.suffix}"  # "google.com"
+    
+    #verifica a similaridade com cada dominio conhecido
+    for conhecido in DOMINIOS_CONHECIDOS:
+        #se a similaridade for maior ou igual a 0.7 (70%) mas menor que 1 (iguais) consideramos suspeito
+        if similar(dominio_base, conhecido) >= 0.7 and similar(dominio_base, conhecido) < 1.0:
+            #print para teste - pode ser removido depois  
+            print (f"Dominio suspeito: {dominio_base} é similar a {conhecido} com similaridade {similar(dominio_base, conhecido)}")
+            return True  #dominio suspeito
+        
+    return False  #dominio normal
+
+#pequeno teste
+#dominio, caminho, parametros = extract_url_components("https://www.google.com/search?client=opera-gx&q=vscode+collaborative+coding&sourceid=opera&ie=UTF-8&oe=UTF-8")
+#respostas:
+#print(check_similar_known_domains(dominio)) #--> False
+#print (check_similar_known_domains("www.g00glE.com")) #--> True
+#print (check_similar_known_domains("www.arnazon.com")) #--> True
 
 
-#multiplos subniveis de dominio ou uso de hifens
+
+# --- multiplos subniveis de dominio ---
+#verifica se ha muitos subniveis (mais de 3) ou hifens no dominio - Se sim, pode ser suspeito
+def check_subdomains_sublevels(dominio):
+    #extrai o subdominio
+    subdomain = tldextract.extract(dominio).subdomain
+    #conta os subniveis (pontos no subdominio)
+    niveis = subdomain.count('.')
+    return niveis >= 3  #retorna True se houver mais de 3 subniveis
+
+# uso de hifens no dominio
+def check_domain_hyphens(dominio):
+    #extrai o subdominio
+    nome_dominio = tldextract.extract(dominio).domain
+
+    #verifica se ha hifens no dominio
+    return '-' in nome_dominio
+
+#pequeno teste
+#dominio, caminho, parametros = extract_url_components("https://sub1.sub2.sub3.sub4.google.com/search?client=opera-gx&q=vscode+collaborative+coding&sourceid=opera&ie=UTF-8&oe=UTF-8")
+#respostas: 
+#print(check_subdomains_sublevels(dominio)) #--> True
+#print(check_domain_hyphens(dominio)) #--> False
+#print (check_subdomains_sublevels("sub1-sub2-sub3-sub4-google.com")) #--> False
+#print (check_domain_hyphens("sub1-sub2-sub3-sub4-google.com")) #--> True
 
 
-#ausencia de HTTPS ou certificado SSL invalido - nao seguro
+
+# --- ausencia de HTTPS ou certificado SSL invalido -> nao seguro ---
+
+#verifica se a URL usa HTTPS 
+def usa_https(url):
+    return url.startswith("https://")
 
 
-#ausencia de registos DNS
+#pequeno teste
+#print(usa_https("https://google.com"))   # -->True
+#print(usa_https("http://google.com"))    # -->False
+
+#verifica se o certificado SSL é valido
+def certificado_ssl_ok(url):
+    try:
+        resposta = requests.get(url, timeout=5)
+        # se chegou aqui sem erro de SSL, consideramos OK
+        return True
+    except requests.exceptions.SSLError as e:
+        print("Erro de SSL:", e)
+        return False
+    except requests.exceptions.RequestException as e:
+        # outros erros (timeout, DNS, etc.) não dizem necessariamente que o certificado é mau
+        print("Erro ao aceder ao site:", e)
+        return None  # None = não foi possível concluir
+
+#pequeno teste
+#print(certificado_ssl_ok("https://google.com"))   # --> True
+#print(certificado_ssl_ok("https://expired.badssl.com"))  # -->False + erro de SSL
 
 
-#localização suspeita do servidor (pais de alto risco ou diferente do esperado)
+
+# --- ausencia de registos DNS ---
+def check_dns_records(dominio):
+    try:
+        #tenta resolver o dominio
+        dns.resolver.resolve(dominio, 'A')  #registo A (IPv4)
+        return True  #registos DNS encontrados
+    except dns.resolver.NoAnswer:
+        return False  #nenhum registo encontrado
+    except dns.resolver.NXDOMAIN:
+        return False  #dominio nao existe
+    except Exception as e:
+        print(f"Erro ao verificar registos DNS: {e}")
+        return None  #erro desconhecido
+
+#pequeno teste
+#dominio, caminho, parametros = extract_url_components("https://www.google.com/search?client=opera-gx&q=vscode+collaborative+coding&sourceid=opera&ie=UTF-8&oe=UTF-8")
+#respostas:
+#print(check_dns_records(dominio)) #--> True
+#print (check_dns_records("dominiodesconhecidoexemplo12345.com")) #--> False
+
+
+
+# --- localização suspeita do servidor (pais de alto risco ou diferente do esperado) ---
+
+#obter o endereco IP do dominio
+def obter_ip(dominio):
+    try:
+        resposta = dns.resolver.resolve(dominio, "A")
+        for rdata in resposta:
+            return rdata.address  # ex: "142.250.184.78"
+    #retorna None em caso de erro - ou nao encontrado
+    except Exception as e:
+        print("Erro ao resolver IP do domínio:", e)
+        return None
+
+#usa ip lookup para geolocalizar o endereco IP
+def geolocalizar_ip(ip):
+    try:
+        #usa o servico ip-api.com para obter informacoes de localizacao
+        url = f"http://ip-api.com/json/{ip}"
+        resp = requests.get(url, timeout=5)
+        dados = resp.json()
+
+        #se nao for sucesso, retorna None
+        if dados.get("status") != "success":
+            return None
+
+        #retorna um dicionario com pais, regiao, cidade, isp
+        return {
+            "pais": dados.get("country"),
+            "regiao": dados.get("regionName"),
+            "cidade": dados.get("city"),
+            "isp": dados.get("isp"),
+        }
+    #retorna None em caso de erro
+    except Exception as e:
+        print("Erro ao localizar IP:", e)
+        return None
+
+PAIS_ESPERADO_POR_TLD = {
+    # Europa
+    "pt": "Portugal",
+    "es": "Spain",
+    "fr": "France",
+    "de": "Germany",
+    "it": "Italy",
+    "nl": "Netherlands",
+    "be": "Belgium",
+    "lu": "Luxembourg",
+    "ch": "Switzerland",
+    "at": "Austria",
+    "uk": "United Kingdom",  # usado em muitos dominios antigos
+    "gb": "United Kingdom",
+    "ie": "Ireland",
+    "se": "Sweden",
+    "no": "Norway",
+    "dk": "Denmark",
+    "fi": "Finland",
+    "pl": "Poland",
+    "cz": "Czech Republic",
+    "sk": "Slovakia",
+    "hu": "Hungary",
+    "ro": "Romania",
+    "bg": "Bulgaria",
+    "gr": "Greece",
+    "ru": "Russia",
+
+    # América
+    "us": "United States",
+    "ca": "Canada",
+    "mx": "Mexico",
+    "br": "Brazil",
+    "ar": "Argentina",
+    "cl": "Chile",
+    "co": "Colombia",
+    "pe": "Peru",
+    "uy": "Uruguay",
+    "ve": "Venezuela",
+
+    # Ásia / Oceânia
+    "cn": "China",
+    "jp": "Japan",
+    "kr": "South Korea",
+    "in": "India",
+    "hk": "Hong Kong",
+    "sg": "Singapore",
+    "au": "Australia",
+    "nz": "New Zealand",
+
+    # África
+    "za": "South Africa",
+    "ng": "Nigeria", 
+    "eg": "Egypt",
+    "ma": "Morocco",
+}
+
+PAISES_SUSPEITOS = {
+    "Russia",
+    "China",
+    "North Korea",
+    "Iran",
+    "Syria",
+    "Cuba",
+    "Venezuela",
+    "Pakistan",
+    "Afghanistan",
+    "Iraq",
+    "Sudan",
+    "Libya",
+    "Zimbabwe",
+    "Myanmar",
+    "Bangladesh",
+    "Nigeria",
+    "Egypt",
+    "Turkey",
+}
+
+def check_suspicious_server_location(dominio):
+    #obter o endereco IP do dominio
+    ip = obter_ip(dominio)
+    if not ip:
+        print("Nao foi possivel obter o IP do dominio.")
+        return None  #nao foi possivel obter o IP
+
+    #geolocalizar o IP
+    info_localizacao = geolocalizar_ip(ip)
+    if not info_localizacao:
+        print("Nao foi possivel localizar o IP")
+        return None  #nao foi possivel localizar o IP
+
+    pais_servidor = info_localizacao.get("pais")
+    if not pais_servidor:
+        print("Pais do servidor nao encontrado.")
+        return None  #pais nao encontrado
+
+    #extrai o TLD do dominio
+    tld = tldextract.extract(dominio).suffix.split('.')[-1]  #pega o ultimo nivel do TLD
+
+    #verifica se ha um pais esperado para esse TLD
+    pais_esperado = PAIS_ESPERADO_POR_TLD.get(tld)
+    
+    #veridica se o pais do servidor é suspeito
+    if pais_servidor in PAISES_SUSPEITOS:
+        print (f"Pais do servidor suspeito: {pais_servidor}")
+        #pais do servidor é suspeito
+        return True
+    
+    #verifica se o pais do servidor é diferente do esperado
+    if pais_esperado:
+        print (f"Pais do servidor: {pais_servidor}, Pais esperado para TLD .{tld}: {pais_esperado}")
+        #compara o pais do servidor com o pais esperado
+        return pais_servidor != pais_esperado  #retorna True se for diferente (suspeito)
+    print("Pais esperado para o TLD nao encontrado.")
+    return False  #sem informacao suficiente para determinar suspeita
+
+#pequeno teste
+#dominio, caminho, parametros = extract_url_components("https://www.google.com/search?client=opera-gx&q=vscode+collaborative+coding&sourceid=opera&ie=UTF-8&oe=UTF-8")
+#respostas:
+#print(check_suspicious_server_location(dominio)) #--> False
+#print(check_suspicious_server_location("www.google.fr")) #--> True ou False dependendo da localização do servidor
+
 
 
 #-------------------Analise do caminho --------------------
