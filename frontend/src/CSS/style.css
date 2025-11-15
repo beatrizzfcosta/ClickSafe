@@ -1,16 +1,15 @@
 html, body, #root{
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    min-height: 100vh;
+    padding: 10px;
+    text-align: center;
+    background-color: #F0E7D5 ;
 }
 
 header {
     background-color: #212842;
 }
 
+
 footer {
-    margin: 0;
     background-color: #212842;
     color: #F0E7D5;
     padding: 20px 0;
@@ -41,8 +40,49 @@ footer {
     color: #F0E7D5;
 }
 
-.nav input{
+input{
     background-color: #F0E7D5;
-    flex-grow: 1;
+    min-width: 250px;
+    min-height: 30px;
+    text-align: center;
 }
 
+main {
+    background-color: #212842;
+}
+
+main .resposta{
+    padding: 5px 0px;
+    background-color: #F0E7D5;
+}
+
+main .URL{
+    padding-bottom: 10px;
+}
+
+ul {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    background-color: #F0E7D5;
+    display: flex;
+    width: 100%;
+}
+
+ul li {
+    flex-grow: 1;
+    text-align: center;
+}
+
+ul li a {
+    display: block;
+    color: #212842;
+    text-align: center;
+    padding: 14px 16px;
+    text-decoration: none;
+}
+
+ul li a:hover {
+    background-color: #212842;
+    color: #F0E7D5;
+}

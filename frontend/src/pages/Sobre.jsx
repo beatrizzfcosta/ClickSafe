@@ -1,16 +1,15 @@
 import Header from "./Elements/Header.jsx";
 import Footer from "./Elements/Footer.jsx";
-import Body from "./Elements/Body.jsx";
-function Home() {
+import BodySobre from "./Elements/BodySobre.jsx";
+function Sobre(){
 
-    return (
+    return(
         <>
             <Header />
-            <Body />
+            <BodySobre/>
             <Footer />
-
         </>
     )
 }
 
-export default Home
+export default Sobre
