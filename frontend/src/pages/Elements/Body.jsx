@@ -1,11 +1,27 @@
 import Resposta from "./Resposta.jsx";
+import {useState} from "react";
 function Body(){
+    const [url, setURL] = useState('')
+
+    const submit=async(e)=>{
+        e.preventDefault()
+    }
+
+    async function get_link_id(URL, URL_normalizado){
+        const get_link_id_BD = ''
+
+        try {
+
+        } catch (error) {
+
+        }
+    }
 
     return (
         <>
             <main id="body">
                 <div className="URL">
-                    <input type="text" placeholder="Enter website or URL here"/>
+                    <input type="text" onChange={(e) => {setURL(e.target.value)}} onClick={submit} placeholder="Enter website or URL here"/>
                 </div>
                 <div className="resposta">
                     <p>
