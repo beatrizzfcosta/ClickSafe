@@ -3,22 +3,23 @@ import json
 import os
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
 
 #Ajusta o sys.path para permitir imports corretos
-BASE_DIR = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(BASE_DIR))
+ROOT_DIR = Path(__file__).resolve().parents[3]  
+sys.path.insert(0, str(ROOT_DIR))
 
 #Carrega .env.local se existir
-try:
-    from dotenv import load_dotenv
-    env_path = BASE_DIR / ".env.local"
-    if env_path.exists():
-        load_dotenv(env_path)
-except Exception:
-    pass
+env_path = ROOT_DIR / ".env.local"
 
-from services.apivoid.apivoidrep import check_apivoid
+print(f"DEBUG: env_path = {env_path}, exists = {env_path.exists()}")
 
+if env_path.exists():
+    load_dotenv(env_path)
+else:
+    print("Aviso: .env.local não encontrado no root do projeto.")
+
+from backend.services.apivoid.apivoidrep import check_apivoid
 
 async def main():
     if len(sys.argv) < 2:
