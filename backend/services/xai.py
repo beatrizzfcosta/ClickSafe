@@ -25,7 +25,7 @@ URL analisada: {url}
 - Fontes:
   - Google Safe Browsing: {sources.get("GOOGLE_SAFE_BROWSING",{})}
   - VirusTotal: {sources.get("VIRUSTOTAL",{})}
-  - APIVOID: {sources.get("APIVOID",{})}
+  - APIVOID: (desabilitado temporariamente)
 
 [Heurísticas]
 - Score (0-100): {heur_score}

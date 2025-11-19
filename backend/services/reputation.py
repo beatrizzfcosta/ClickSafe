@@ -2,7 +2,8 @@
 from typing import Dict
 from .gsb import check_gsb
 from .vt import check_vt
-from .apivoid.apivoidrep import check_apivoid
+# APIVOID desabilitado temporariamente
+# from .apivoid.apivoidrep import check_apivoid
 
 
 def _status_to_score(status: str) -> float:
@@ -22,9 +23,8 @@ async def consolidate_reputation(url: str) -> Dict:
     2. Se GSB for POSITIVE (malicioso), retorna imediatamente
     3. Se GSB for NEGATIVE (seguro), verifica VirusTotal
     4. Se VirusTotal for POSITIVE, retorna como malicioso
-    5. Se VirusTotal for NEGATIVE, verifica APIVOID
-    6. Se APIVOID for POSITIVE, retorna como malicioso
-    7. Se APIVOID for NEGATIVE, retorna como seguro
+    5. Se VirusTotal for NEGATIVE, retorna como seguro
+    (APIVOID desabilitado temporariamente)
     """
     sources = {}
     
@@ -38,7 +38,8 @@ async def consolidate_reputation(url: str) -> Dict:
         print("  GSB detectou ameaça - marcando como malicioso")
         # Preenche os outros como não verificados
         sources["VIRUSTOTAL"] = {"status": "UNKNOWN", "reason": "not_checked", "raw": {}}
-        sources["APIVOID"] = {"status": "UNKNOWN", "reason": "not_checked", "raw": {}}
+        # APIVOID desabilitado
+        # sources["APIVOID"] = {"status": "UNKNOWN", "reason": "not_checked", "raw": {}}
         return {"sources": sources, "_score": 1.0, "final_status": "POSITIVE"}
     
     #2. GSB foi NEGATIVE, verifica VirusTotal
@@ -50,24 +51,29 @@ async def consolidate_reputation(url: str) -> Dict:
     #Se VirusTotal estiver implementado e for POSITIVE, retorna
     if vt["status"] == "POSITIVE":
         print("  VirusTotal detectou ameaça - marcando como malicioso")
-        sources["APIVOID"] = {"status": "UNKNOWN", "reason": "not_checked", "raw": {}}
+        # APIVOID desabilitado
+        # sources["APIVOID"] = {"status": "UNKNOWN", "reason": "not_checked", "raw": {}}
         return {"sources": sources, "_score": 1.0, "final_status": "POSITIVE"}
     
-    #3. VirusTotal foi NEGATIVE ou UNKNOWN, verifica APIVOID
+    #3. VirusTotal foi NEGATIVE ou UNKNOWN - APIVOID desabilitado
     if vt["status"] == "NEGATIVE":
-        print("  VirusTotal não detectou ameaça - verificando APIVOID...")
+        print("  VirusTotal não detectou ameaça")
     else:
-        print("  VirusTotal não disponível - verificando APIVOID...")
+        print("  VirusTotal não disponível")
     
-    apivoid = await check_apivoid(url)
-    sources["APIVOID"] = apivoid
-
-    # TODO: Implementar check_pt quando estiver disponível
-    
-    #Se APIVOID estiver implementado e for POSITIVE, retorna
-    if apivoid["status"] == "POSITIVE":
-        print("  APIVOID detectou ameaça - marcando como malicioso")
-        return {"sources": sources, "_score": 1.0, "final_status": "POSITIVE"}
+    # APIVOID desabilitado temporariamente
+    # if vt["status"] == "NEGATIVE":
+    #     print("  VirusTotal não detectou ameaça - verificando APIVOID...")
+    # else:
+    #     print("  VirusTotal não disponível - verificando APIVOID...")
+    # 
+    # apivoid = await check_apivoid(url)
+    # sources["APIVOID"] = apivoid
+    # 
+    # #Se APIVOID estiver implementado e for POSITIVE, retorna
+    # if apivoid["status"] == "POSITIVE":
+    #     print("  APIVOID detectou ameaça - marcando como malicioso")
+    #     return {"sources": sources, "_score": 1.0, "final_status": "POSITIVE"}
     
     #4. Todas as fontes verificadas retornaram NEGATIVE ou UNKNOWN
     #Se todas forem NEGATIVE, é seguro. Se alguma for UNKNOWN, é indeterminado.

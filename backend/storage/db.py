@@ -56,7 +56,53 @@ def init_db(db_path: str = DB_PATH, schema_path: Path = SCHEMA_PATH) -> None:
         schema_sql = f.read()
     
     with get_db(db_path) as conn:
+        # Check if reputation_checks table exists and needs migration
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name='reputation_checks'
+        """)
+        table_exists = cursor.fetchone() is not None
+        
+        if table_exists:
+            # Check if the constraint needs updating by trying to read the schema
+            # SQLite doesn't expose CHECK constraints easily, so we'll recreate the table
+            # First, backup data if needed
+            cursor.execute("SELECT COUNT(*) FROM reputation_checks")
+            row_count = cursor.fetchone()[0]
+            
+            if row_count > 0:
+                # Backup data
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS reputation_checks_backup AS 
+                    SELECT * FROM reputation_checks
+                """)
+            
+            # Drop the old table
+            cursor.execute("DROP TABLE IF EXISTS reputation_checks")
+            # Drop index if exists
+            cursor.execute("DROP INDEX IF EXISTS idx_reputation_checks_analysis")
+            cursor.execute("DROP INDEX IF EXISTS idx_reputation_checks_source")
+            conn.commit()
+        
+        # Execute schema (will create all tables)
         conn.executescript(schema_sql)
+        
+        # Restore data if it was backed up
+        if table_exists:
+            cursor.execute("SELECT COUNT(*) FROM reputation_checks_backup")
+            backup_count = cursor.fetchone()[0]
+            if backup_count > 0:
+                # Only restore if source values are valid
+                cursor.execute("""
+                    INSERT INTO reputation_checks 
+                    (analysis_id, source, status, raw_json, reason, elapsed_ms, checked_at)
+                    SELECT analysis_id, source, status, raw_json, reason, elapsed_ms, checked_at
+                    FROM reputation_checks_backup
+                    WHERE source IN ('VIRUSTOTAL', 'APIVOID', 'GOOGLE_SAFE_BROWSING')
+                """)
+                cursor.execute("DROP TABLE IF EXISTS reputation_checks_backup")
+                conn.commit()
         
         # Popular tabela heuristics
         if seed_path.exists():

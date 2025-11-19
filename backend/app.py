@@ -12,11 +12,13 @@ from storage.db import (
     insert_analysis,
     insert_reputation_check,
     insert_heuristic_hit,
+    insert_ai_request,
     get_analysis_by_url,
     get_full_analysis,
     get_analyses_stats
 )
 from services.reputation import consolidate_reputation
+from services.xai import explain_result
 
 
 def normalize_url(url: str) -> str:
@@ -154,50 +156,52 @@ async def analyze_url(url: str) -> dict:
         heuristics_score=heuristics_score
     )
     
-    # Gera explicação baseada na verificação sequencial
-    explanation_parts = []
+    # Gera explicação usando IA (xai)
+    print("Gerando explicação com IA...")
+    try:
+        explanation = explain_result(url, heuristics_result, rep_result)
+        print("✓ Explicação gerada com sucesso")
+    except Exception as e:
+        print(f"⚠ Erro ao gerar explicação com IA: {e}")
+        # Fallback para explicação manual se a IA falhar
+        explanation_parts = []
     
-    gsb = rep_result["sources"]["GOOGLE_SAFE_BROWSING"]
-    vt = rep_result["sources"]["VIRUSTOTAL"]
-    pt = rep_result["sources"]["PHISHTANK"]
-    
-    if final_reputation_status == "POSITIVE":
-        # Identifica qual fonte detectou a ameaça
-        if gsb["status"] == "POSITIVE":
-            explanation_parts.append("URL marcada como maliciosa por Google Safe Browsing.")
-        elif vt["status"] == "POSITIVE":
-            explanation_parts.append("URL marcada como maliciosa por VirusTotal (GSB não detectou ameaça).")
-        elif pt["status"] == "POSITIVE":
-            explanation_parts.append("URL marcada como maliciosa por PhishTank (GSB e VirusTotal não detectaram ameaça).")
-    elif final_reputation_status == "NEGATIVE":
-        # Todas as fontes verificadas retornaram negativo
-        checked_sources = []
-        if gsb["status"] == "NEGATIVE":
-            checked_sources.append("Google Safe Browsing")
-        if vt["status"] == "NEGATIVE":
-            checked_sources.append("VirusTotal")
-        if pt["status"] == "NEGATIVE":
-            checked_sources.append("PhishTank")
+        gsb = rep_result["sources"]["GOOGLE_SAFE_BROWSING"]
+        vt = rep_result["sources"].get("VIRUSTOTAL", {})
         
-        if checked_sources:
-            sources_str = ", ".join(checked_sources)
-            explanation_parts.append(f"URL verificada como segura por {sources_str}.")
+        if final_reputation_status == "POSITIVE":
+            # Identifica qual fonte detectou a ameaça
+            if gsb["status"] == "POSITIVE":
+                explanation_parts.append("URL marcada como maliciosa por Google Safe Browsing.")
+            elif vt.get("status") == "POSITIVE":
+                explanation_parts.append("URL marcada como maliciosa por VirusTotal (GSB não detectou ameaça).")
+        elif final_reputation_status == "NEGATIVE":
+            # Todas as fontes verificadas retornaram negativo
+            checked_sources = []
+            if gsb["status"] == "NEGATIVE":
+                checked_sources.append("Google Safe Browsing")
+            if vt.get("status") == "NEGATIVE":
+                checked_sources.append("VirusTotal")
+            
+            if checked_sources:
+                sources_str = ", ".join(checked_sources)
+                explanation_parts.append(f"URL verificada como segura por {sources_str}.")
+            else:
+                explanation_parts.append("URL verificada como segura.")
+        else:  # UNKNOWN
+            explanation_parts.append("Resultado indeterminado - algumas fontes não estão disponíveis.")
+            if gsb["status"] != "UNKNOWN":
+                explanation_parts.append(f"Google Safe Browsing: {gsb['status']}.")
+            if vt.get("reason") == "stub":
+                explanation_parts.append("VirusTotal ainda não configurado.")
+        
+        if heuristics_result["hits"]:
+            triggered_count = sum(1 for h in heuristics_result["hits"] if h.get("triggered", False))
+            explanation_parts.append(f"{triggered_count} heurística(s) acionada(s).")
         else:
-            explanation_parts.append("URL verificada como segura.")
-    else:  # UNKNOWN
-        explanation_parts.append("Resultado indeterminado - algumas fontes não estão disponíveis.")
-        if gsb["status"] != "UNKNOWN":
-            explanation_parts.append(f"Google Safe Browsing: {gsb['status']}.")
-        if vt["reason"] == "stub":
-            explanation_parts.append("VirusTotal e PhishTank ainda não configurados.")
-    
-    if heuristics_result["hits"]:
-        triggered_count = sum(1 for h in heuristics_result["hits"] if h.get("triggered", False))
-        explanation_parts.append(f"{triggered_count} heurística(s) acionada(s).")
-    else:
-        explanation_parts.append("Heurísticas ainda não implementadas.")
-    
-    explanation = " ".join(explanation_parts)
+            explanation_parts.append("Heurísticas ainda não implementadas.")
+        
+        explanation = " ".join(explanation_parts) if explanation_parts else "Análise concluída."
     
     # Salva a análise no banco
     print("Salvando no banco de dados...")
@@ -212,6 +216,11 @@ async def analyze_url(url: str) -> dict:
     # Salva cada verificação de reputação
     print("Salvando verificações de reputação...")
     for source_name, source_data in rep_result["sources"].items():
+        # APIVOID desabilitado temporariamente - ignora se aparecer
+        if source_name == "APIVOID":
+            print(f"   - {source_name}: ignorado (desabilitado temporariamente)")
+            continue
+        
         # Só salva se foi realmente verificada (não foi "not_checked")
         if source_data.get("reason") == "not_checked":
             print(f"   - {source_name}: não verificado (verificação anterior detectou ameaça)")
@@ -232,7 +241,7 @@ async def analyze_url(url: str) -> dict:
         )
         print(f"   ✓ {source_name}: {status} ({reason})")
     
-    # Salva resultados de heurísticas
+    # Salva resultados de heurísticas (vazias por hora)
     if heuristics_result["hits"]:
         print("Salvando resultados de heurísticas...")
         for hit in heuristics_result["hits"]:
@@ -244,6 +253,29 @@ async def analyze_url(url: str) -> dict:
                 details=hit.get("details")
             )
             print(f"   ✓ {hit['code']}: {hit['severity']} (triggered={hit.get('triggered', False)})")
+    else:
+        print("Heurísticas vazias (não implementadas ainda)")
+    
+    # Salva requisição de IA
+    print("Salvando requisição de IA...")
+    try:
+        from services.xai import MODEL, build_prompt
+        prompt = build_prompt(url, heuristics_result, rep_result)
+        insert_ai_request(
+            analysis_id=analysis_id,
+            model=MODEL,
+            prompt=prompt,
+            response=explanation,
+            risk_score=final_score,
+            meta=json.dumps({
+                "reputation_score": reputation_score,
+                "heuristics_score": heuristics_score,
+                "final_status": final_reputation_status
+            })
+        )
+        print(f"   ✓ Requisição de IA salva (modelo: {MODEL})")
+    except Exception as e:
+        print(f"   ⚠ Erro ao salvar requisição de IA: {e}")
     
     # Retorna análise completa
     return get_full_analysis(analysis_id)
@@ -304,6 +336,11 @@ async def main():
             print(f"   {risk_indicator} Status: {risk_status}")
             print(f"   Score de Risco: {score:.2f}/100 (0=Seguro, 100=Malicioso)")
             print(f"   Verificações: {len(result['reputation_checks'])}")
+            
+            # Mostra explicação gerada pela IA
+            if result.get('explanation'):
+                print(f"\nExplicação (IA):")
+                print(f"   {result['explanation']}")
             
             print("\n🔍 Detalhes das verificações:")
             for check in result['reputation_checks']:
