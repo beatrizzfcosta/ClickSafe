@@ -120,8 +120,8 @@ def get_or_create_link(
 def insert_analysis(
     url: str,
     normalized_url: str,
-    score: float,
-    explanation: str,
+    score: Optional[float] = None,
+    explanation: Optional[str] = None,
     db_path: str = DB_PATH
 ) -> int:
     """
