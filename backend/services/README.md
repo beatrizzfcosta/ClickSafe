@@ -1,103 +1,67 @@
 # Serviços de Reputação - ClickSafe
 
-Este módulo contém a implementação dos serviços de verificação de reputação de URLs, incluindo Google Safe Browsing (GSB), VirusTotal e PhishTank.
+Este módulo contém a implementação dos serviços de verificação de reputação de URLs, incluindo Google Safe Browsing (GSB), VirusTotal e APIVOID.
 
 ## Índice
-
 1. [Google Safe Browsing (GSB)](#google-safe-browsing-gsb)
-   - [Obter Chave de API](#obter-chave-de-api)
-   - [Configuração](#configuração)
-   - [Implementação](#implementação)
-   - [Uso](#uso)
+- [Obter Chave de API](#obter-chave-de-api)
+- [Configuração](#configuração)
+- [Implementação](#implementação)
+- [Uso](#uso)
 2. [VirusTotal](#virustotal)
-   - [Obter Chave de API](#obter-chave-de-api-1)
-   - [Configuração do VirusTotal](#configuração-do-virustotal)
-   - [Implementação](#implementação-1)
-3. [PhishTank](#phishtank)
-4. [Estrutura de Arquivos](#estrutura-de-arquivos)
+- [Obter Chave de API](#obter-chave-de-api-1)
+- [Configuração](#configuração-do-virustotal)
+- [Implementação](#implementação-1)
+3. [APIVOID](#apivoid)
+4. [Dependências](#dependências)
+5. [Troubleshooting](#troubleshooting)
+6. [Limites e Cotas](#limites-e-cotas)
+7. [Referências](#referências)
 
 ---
 
 ## Google Safe Browsing (GSB)
 
 ### Obter Chave de API
+1. Acesse o **Google Cloud Console**: https://console.cloud.google.com/
+2. Faça login.
+3. Crie ou selecione um projeto.
+4. Ative a Safe Browsing API:
+- **APIs & Services → Library** → "Safe Browsing API" → **Enable**
+5. Crie uma API key:
+- **APIs & Services → Credentials → Create Credentials → API Key**
+6. Restrinja a chave conforme as suas preferências.
 
-#### 1. Acessar Google Cloud Console
-
-1. Acessar: https://console.cloud.google.com/
-2. Fazer login com conta Google
-3. Criar um novo projeto ou selecionar um existente:
-   - Clicar em "Select a project" no topo
-   - Clicar em "New Project"
-   - Digitar o nome (ex: "ClickSafe")
-   - Clicar em "Create"
-
-#### 2. Habilitar a API
-
-1. No menu lateral, em **APIs & Services** → **Library**
-2. Buscar por "Safe Browsing API"
-3. Clicar em "Google Safe Browsing API"
-4. Clicar em **Enable**
-
-#### 3. Criar Credencial (API Key)
-
-1. Em **APIs & Services** → **Credentials**
-2. Clicar em **+ Create Credentials** → **API Key**
-3. Uma chave será gerada automaticamente
-4. **Importante**: Clicar em **Restrict Key** para segurança:
-   - Em **Application restrictions**: Selecionar "None" (para desenvolvimento) ou "IP addresses" (para produção)
-   - Em **API restrictions**: Selecionar "Restrict key" e escolher "Google Safe Browsing API"
-   - Clicar em **Save**
-
-#### 4. Copiar a Chave
-
-A chave será exibida no formato: `AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`
-
-**Importante**: Manter esta chave segura e nunca a commite no Git!
-
----
+**Importante:** Nunca dar commit na chave no Git.
 
 ### Configuração
 
 #### 1. Instalar Dependências
 
-** Usando ambiente virtual **
+**Usando ambiente virtual**
 
 ```bash
 cd backend/services
 python3 -m venv venv
-source venv/bin/activate  # No macOS/Linux
-# ou: venv\Scripts\activate  # No Windows
+source venv/bin/activate  #No macOS/Linux
+#ou: venv\Scripts\activate  #No Windows
 pip install -r requirements.txt
 ```
 
-
-
-Ou usando o arquivo de requirements:
-
-```bash
-pip install -r services/requirements.txt
-```
-
-#### 2. Criar Arquivo de Configuração
-
+#### Adicionar chave ao `.env.local` 
 Criar o arquivo `.env.local` no diretório `backend/`:
-
 ```bash
 cd backend
 echo "GSB_API_KEY=chave_aqui" > .env.local
 ```
-
-Ou editar manualmente:
+**Ou editar manualmente:**
 
 ```bash
-# backend/.env.local
+#backend/.env.local
 GSB_API_KEY=AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ```
 
 **Segurança**: O arquivo `.env.local` já está no `.gitignore` e não será commitado.
-
----
 
 ### Implementação
 
@@ -109,7 +73,7 @@ O módulo `gsb.py` implementa a consulta ao Google Safe Browsing API v4.
 
 1. **Carregamento Automático de Variáveis de Ambiente**
    ```python
-   # Carrega automaticamente do .env.local
+   #Carrega automaticamente do .env.local
    from dotenv import load_dotenv
    env_path = Path(__file__).parent.parent / '.env.local'
    if env_path.exists():
@@ -123,8 +87,8 @@ O módulo `gsb.py` implementa a consulta ao Google Safe Browsing API v4.
      {
          "status": "POSITIVE" | "NEGATIVE" | "UNKNOWN",
          "reason": "ok" | "no_key" | "timeout" | "error:...",
-         "raw": {...},  # Resposta completa da API
-         "elapsed_ms": int  # Tempo de resposta em milissegundos
+         "raw": {...},  #Resposta completa da API
+         "elapsed_ms": int  #Tempo de resposta em milissegundos
      }
      ```
 
@@ -168,18 +132,18 @@ Consolida resultados de múltiplas fontes de reputação.
 
 **Função: `consolidate_reputation(url: str)`**
 
-- Chama `check_gsb()` para Google Safe Browsing
-- Mantém VirusTotal e PhishTank como stubs (mockados)
-- Calcula score agregado (0.0 a 1.0)
+- Executa `check_gsb()` para Google Safe Browsing
+- Mantém VirusTotal e APIVOID como **stubs** (mockados)
+- Calcula score agregado (0.0-1.0)
 - Retorna:
   ```python
   {
       "sources": {
           "GOOGLE_SAFE_BROWSING": {...},
           "VIRUSTOTAL": {"status": "UNKNOWN", "reason": "stub"},
-          "PHISHTANK": {"status": "UNKNOWN", "reason": "stub"}
+          "APIVOID": {"status": "UNKNOWN", "reason": "stub"}
       },
-      "_score": 0.3333  # Score agregado (0.0 = seguro, 1.0 = perigoso)
+      "_score": 0.3333  #Score agregado (0.0 = seguro, 1.0 = perigoso)
   }
   ```
 
@@ -189,19 +153,17 @@ Consolida resultados de múltiplas fontes de reputação.
 - `UNKNOWN` (indeterminado): 0.5
 - Score final = média dos scores de todas as fontes
 
----
-
 ### Uso
 
 #### 1. Teste via CLI
 
-**Com ambiente virtual ativado:**
+**Com ambiente virtual ativo:**
 
 ```bash
 cd backend/services
-source venv/bin/activate  # Ativar o venv
-python gsb/test_gsb_cli.py https://google.com # "malicious":false
-python gsb/test_gsb_cli.py http://malware.testing.google.test/testing/malware/ # "malicious":true
+source venv/bin/activate  #Ativar o venv
+python gsb/test_gsb_cli.py https://google.com #"malicious":false
+python gsb/test_gsb_cli.py http://malware.testing.google.test/testing/malware/ #"malicious":true
 ```
 
 **Ou usando o Python do venv diretamente:**
@@ -234,7 +196,7 @@ python services/gsb/test_gsb_cli.py https://example.com
       "reason": "stub",
       "raw": {}
     },
-    "PHISHTANK": {
+    "APIVOID": {
       "status": "UNKNOWN",
       "reason": "stub",
       "raw": {}
@@ -253,7 +215,7 @@ import asyncio
 async def main():
     result = await consolidate_reputation("https://example.com")
     print(result["sources"]["GOOGLE_SAFE_BROWSING"]["status"])
-    # Output: NEGATIVE
+    #Output: NEGATIVE
 
 asyncio.run(main())
 ```
@@ -266,32 +228,16 @@ O `app.py` já integra automaticamente:
 from app import analyze_url
 
 result = await analyze_url("https://example.com")
-# Salva automaticamente no banco de dados
-# Retorna análise completa com todas as verificações
+#Salva automaticamente no BD e Retorna análise completa
 ```
-
----
 
 ## VirusTotal
 
 ### Obter Chave de API
 
-#### 1. Criar Conta no VirusTotal
-
-1. Acessar: https://www.virustotal.com/gui/join-us
-2. Preencher o formulário de registro:
-   - Email
-   - Senha
-   - Aceitar termos de uso
-3. Clicar em **Create Account**
-4. Verificar o email (verifique a caixa de spam se necessário)
-
-#### 2. Obter API Key
-
-1. Fazer login em: https://www.virustotal.com/gui/
-2. Clicar no seu perfil (canto superior direito)
-3. Selecionar **API key** no menu
-4. Copiar a chave de API exibida
+1. Criar Conta: https://www.virustotal.com/gui/join-us
+2. Acessar perfil e Selecionar **API key** no menu
+3. Copiar a chave de API exibida
 
 **Formato da chave**: Uma string longa de caracteres alfanuméricos (ex: `a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0`)
 
@@ -300,22 +246,18 @@ result = await analyze_url("https://example.com")
 - Mantenha esta chave segura e nunca a commite no Git!
 - Planos gratuitos têm limites de requisições (geralmente 4 requisições/minuto)
 
-#### 3. Limites da API
+### Limites da API
 
 - **Free Tier**: 4 requisições por minuto
 - **Rate Limit**: 4 req/min (pode variar)
-- Para uso comercial ou maior volume, considere planos pagos
-
----
+- Para uso comercial ou maior volume, considerar planos pagos
 
 ### Configuração do VirusTotal
-
-#### Adicionar API Key ao `.env.local`
 
 Editar o arquivo `.env.local` no diretório `backend/`:
 
 ```bash
-# backend/.env.local
+#backend/.env.local
 VT_API_KEY=a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0
 ```
 ---
@@ -331,36 +273,53 @@ O módulo `vt.py` já está implementado e segue o mesmo padrão do GSB:
 
 **Uso automático**: Quando o GSB retornar NEGATIVE, o sistema verificará automaticamente no VirusTotal (se a API key estiver configurada).
 
----
+## APIVOID
 
-## PhishTank
+O módulo do `apivoidrep.py` está implementando seguindo o mesmo padrão de GSB e VirusTotal:
 
-Atualmente implementado como **stub** (mockado), retornando sempre:
+### Implementação
 
-```python
+1. Obter chave de API em: https://dash.apivoid.com/api-keys/
+2. Uso do arquivo `apivoidrep.py` 
+3. Adicionar `APIVOID_API_KEY` ao `.env.local`
+4. Atualizar `reputation.py` para utilizar `check_apivoid()` como fonte oficial de reputação
+
+### Funcionamento
+- Consulta o endpoint **URL Reputation API** do APIVOID
+- Retorna dados padronizados nos campos:
+- `status`: `POSITIVE`, `NEGATIVE` ou `UNKNOWN`
+- `reason`: motivo do estado (ex.: `ok`, `no_key`, `invalid_json`, `timeout`, `error:...`)
+- `raw`: resposta completa retornada pela API
+- `elapsed_ms`: tempo total da requisição
+
+### Lógica de Interpretação
+- `score == 0` → **NEGATIVE** (sem risco)
+- `score > 0` → **POSITIVE** (URL listada ou suspeita)
+- Erros, resposta inválida ou chave ausente: **UNKNOWN**
+
+### Exemplo de Retorno
+```json
 {
-    "status": "UNKNOWN",
-    "reason": "stub",
-    "raw": {}
+"status": "NEGATIVE",
+"reason": "ok",
+"raw": {
+"data": {
+"report": {
+"score": 0,
+"details": {"blacklists": {"detections": 0}}
+}
+}
+},
+"elapsed_ms": 241
 }
 ```
 
-### Próximos Passos para PhishTank
-
-1. Obter chave de API em: https://www.phishtank.com/api_register.php
-2. Criar arquivo `pt.py` similar ao `gsb.py` e `vt.py`
-3. Adicionar `PT_API_KEY` ao `.env.local`
-4. Atualizar `reputation.py` para chamar `check_pt()` em vez do stub
-
----
-
 ## Dependências
-
-- `httpx>=0.24.0`: Cliente HTTP assíncrono para requisições
-- `python-dotenv>=1.0.0`: Carregamento de variáveis de ambiente do `.env.local`
-- `requests>=2.31.0`: Cliente HTTP síncrono (usado pelo módulo GSB)
-
----
+```text
+httpx>=0.24.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+```
 
 ## Troubleshooting
 
@@ -381,24 +340,24 @@ pip install -r requirements.txt
 pip install httpx python-dotenv requests
 ```
 
-**Solução 3: Se estiver usando Python do Homebrew**
+**Solução 3: Se estiver a usar Python do Homebrew**
 
 O Python do Homebrew requer ambiente virtual. Siga a Solução 1 acima.
 
-**Nota**: Se você estiver usando conda, certifique-se de que o ambiente está ativado ou use o Python do Homebrew com venv.
+**Nota**: Se estiver usando conda, certifique-se de que o ambiente está ativado ou use o Python do Homebrew com venv.
 
 ### Erro: `"reason": "no_key"`
 
 Verifique se:
 1. O arquivo `.env.local` existe em `backend/`
-2. A chave está no formato: `GSB_API_KEY=sua_chave_aqui`
+2. As chaves estão no formato: `API_KEY=chave_aqui`
 3. Não há espaços extras ou aspas na chave
 
 ### Erro: `"reason": "http_403"`
 
 - Verificar se a API está habilitada no Google Cloud Console
-- Verificar se a chave tem permissão para a Safe Browsing API
-- Verificar se a chave não está restrita a IPs diferentes
+- Verificar se a chave tem permissão para as APIs
+- Verificar se as chaves não estão restritas a IPs diferentes
 
 ### Erro: `"reason": "timeout"`
 
@@ -406,17 +365,21 @@ Verifique se:
 - Verificar conexão com a internet
 - A API pode estar temporariamente indisponível
 
----
-
 ## Limites e Cotas
 
 O Google Safe Browsing API tem limites:
 
-- **Free Tier**: ~10,000 requisições por dia
-- **Rate Limit**: Variável, mas geralmente ~100 requisições/minuto
+- **Free Tier**: ~10,000 requisições por dia;
+- **Rate Limit**: Variável, mas geralmente ~100 requisições/minuto.
 
----
+O VirusTotal tem os seguinte limites:
+- 4 requisições por minuto no plano gratuito.
+
+Limites APIVOID:
+- Aproximadamente 60 requisições por minuto.
 
 ## Referências
 
 - [Google Safe Browsing API v4 Documentation](https://developers.google.com/safe-browsing/v4)
+- [VirusTotal Documentation](https://docs.virustotal.com) 
+- [APIVOID API V2 Documentation](https://docs.apivoid.com)
