@@ -3,22 +3,30 @@
 Este módulo contém a implementação dos serviços de verificação de reputação de URLs, incluindo Google Safe Browsing (GSB), VirusTotal e APIVOID.
 
 ## Índice
+
 1. [Google Safe Browsing (GSB)](#google-safe-browsing-gsb)
-- [Obter Chave de API](#obter-chave-de-api)
-- [Configuração](#configuração)
-- [Implementação](#implementação)
-- [Uso](#uso)
+   - [Obter Chave de API](#obter-chave-de-api)
+   - [Configuração do GSB](#configuração)
+   - [Implementação](#implementação)
+   - [Uso](#uso)
+
 2. [VirusTotal](#virustotal)
-- [Obter Chave de API](#obter-chave-de-api-1)
-- [Configuração](#configuração-do-virustotal)
-- [Implementação](#implementação-1)
+   - [Obter Chave de API](#obter-chave-de-api-1)
+   - [Limites da API](#limites-da-api)
+   - [Configuração do VirusTotal](#configuração-do-virustotal)
+   - [Implementação](#implementação-1)
+
 3. [APIVOID](#apivoid)
+   - [Obter Chave de API](#obter-chave-de-api-2)
+   - [Funcionamento](#funcionamento)
+   - [Lógica de Interpretação](#lógica-de-interpretação)
+   - [Exemplo de Retorno](#exemplo-de-retorno)
+
 4. [Dependências](#dependências)
 5. [Troubleshooting](#troubleshooting)
 6. [Limites e Cotas](#limites-e-cotas)
 7. [Referências](#referências)
 
----
 
 ## Google Safe Browsing (GSB)
 
@@ -246,12 +254,6 @@ result = await analyze_url("https://example.com")
 - Mantenha esta chave segura e nunca a commite no Git!
 - Planos gratuitos têm limites de requisições (geralmente 4 requisições/minuto)
 
-### Limites da API
-
-- **Free Tier**: 4 requisições por minuto
-- **Rate Limit**: 4 req/min (pode variar)
-- Para uso comercial ou maior volume, considerar planos pagos
-
 ### Configuração do VirusTotal
 
 Editar o arquivo `.env.local` no diretório `backend/`:
@@ -277,7 +279,7 @@ O módulo `vt.py` já está implementado e segue o mesmo padrão do GSB:
 
 O módulo do `apivoidrep.py` está implementando seguindo o mesmo padrão de GSB e VirusTotal:
 
-### Implementação
+### Obter Chave de API
 
 1. Obter chave de API em: https://dash.apivoid.com/api-keys/
 2. Uso do arquivo `apivoidrep.py` 
@@ -373,9 +375,11 @@ O Google Safe Browsing API tem limites:
 - **Rate Limit**: Variável, mas geralmente ~100 requisições/minuto.
 
 O VirusTotal tem os seguinte limites:
-- 4 requisições por minuto no plano gratuito.
+- **Free Tier**: 4 requisições por minuto
+- **Rate Limit**: 4 req/min (pode variar)
+- Para uso comercial ou maior volume, considerar planos pagos
 
-Limites APIVOID:
+Limites do APIVOID:
 - Aproximadamente 60 requisições por minuto.
 
 ## Referências
