@@ -1,0 +1,88 @@
+html, body, #root{
+    padding: 10px;
+    text-align: center;
+    background-color: #F0E7D5 ;
+}
+
+header {
+    background-color: #212842;
+}
+
+
+footer {
+    background-color: #212842;
+    color: #F0E7D5;
+    padding: 20px 0;
+}
+
+.membros{
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px;
+
+}
+
+.seccao-membro{
+    padding: 5px 7px;
+    flex-grow: 0;
+}
+
+.header{
+    padding: 10px;
+    color: #F0E7D5;
+}
+
+.nav{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    color: #F0E7D5;
+}
+
+input{
+    background-color: #F0E7D5;
+    min-width: 250px;
+    min-height: 30px;
+    text-align: center;
+}
+
+main {
+    background-color: #212842;
+}
+
+main .resposta{
+    padding: 5px 0px;
+    background-color: #F0E7D5;
+}
+
+main .URL{
+    padding-bottom: 10px;
+}
+
+ul {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    background-color: #F0E7D5;
+    display: flex;
+    width: 100%;
+}
+
+ul li {
+    flex-grow: 1;
+    text-align: center;
+}
+
+ul li a {
+    display: block;
+    color: #212842;
+    text-align: center;
+    padding: 14px 16px;
+    text-decoration: none;
+}
+
+ul li a:hover {
+    background-color: #212842;
+    color: #F0E7D5;
+}
