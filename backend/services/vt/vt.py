@@ -150,38 +150,64 @@ class Virustotal(object):
             if analysis_type == 'url':
                 return submit_data
             
-            # Passo 2: Se for uma análise, consulta o resultado
+            # Passo 2: Se for uma análise, consulta o resultado com loop até completar
             if analysis_id and analysis_type == 'analysis':
                 analysis_endpoint = f"{self.api_url}/analyses/{analysis_id}"
                 
-                # Aguarda a análise processar (pode levar alguns segundos)
-                time.sleep(2)
+                # Loop infinito até a análise ser completada (com timeout máximo de 60 segundos)
+                max_wait_time = 60  # segundos
+                retry_delay = 3  # segundos entre tentativas
+                start_wait = time.time()
                 
-                analysis_response = requests.get(
-                    analysis_endpoint,
-                    headers=self.headers,
-                    timeout=self.timeout
-                )
-                
-                if analysis_response.status_code == 200:
-                    analysis_result = analysis_response.json()
-                    analysis_attrs = analysis_result.get('data', {}).get('attributes', {})
+                while True:
+                    # Verifica timeout máximo
+                    if time.time() - start_wait > max_wait_time:
+                        raise VirustotalWeirdError(0, 'Timeout', f'Analysis timeout after {max_wait_time}s')
                     
-                    # Passo 3: Tenta obter dados completos da URL se disponível
-                    url_id = analysis_attrs.get('url_id')
-                    if url_id:
-                        url_endpoint = f"{self.api_url}/urls/{url_id}"
-                        url_response = requests.get(
-                            url_endpoint,
-                            headers=self.headers,
-                            timeout=self.timeout
-                        )
+                    # Aguarda antes de verificar (exceto na primeira tentativa)
+                    if time.time() - start_wait > 0:
+                        time.sleep(retry_delay)
+                    
+                    analysis_response = requests.get(
+                        analysis_endpoint,
+                        headers=self.headers,
+                        timeout=self.timeout
+                    )
+                    
+                    if analysis_response.status_code == 200:
+                        analysis_result = analysis_response.json()
+                        analysis_attrs = analysis_result.get('data', {}).get('attributes', {})
+                        analysis_status = analysis_attrs.get('status', '')
                         
-                        if url_response.status_code == 200:
-                            return url_response.json()
-                    
-                    # Se não conseguir dados da URL, retorna a análise
-                    return analysis_result
+                        # Se a análise estiver completa, tenta obter dados da URL
+                        if analysis_status == 'completed':
+                            # Passo 3: Tenta obter dados completos da URL se disponível
+                            url_id = analysis_attrs.get('url_id')
+                            if url_id:
+                                url_endpoint = f"{self.api_url}/urls/{url_id}"
+                                url_response = requests.get(
+                                    url_endpoint,
+                                    headers=self.headers,
+                                    timeout=self.timeout
+                                )
+                                
+                                if url_response.status_code == 200:
+                                    return url_response.json()
+                            
+                            # Se não conseguir dados da URL, retorna a análise completa
+                            return analysis_result
+                        # Se ainda estiver em processamento, continua o loop
+                        elif analysis_status in ('queued', 'in_progress'):
+                            continue  # Continua aguardando
+                        else:
+                            # Status desconhecido ou erro, retorna o que temos
+                            return analysis_result
+                    else:
+                        # Erro HTTP, tenta novamente se não for erro fatal
+                        if analysis_response.status_code >= 500:
+                            continue  # Erro do servidor, tenta novamente
+                        else:
+                            self._handle_error_response(analysis_response)
             
             # Fallback: retorna dados da submissão
             return submit_data
@@ -261,14 +287,15 @@ async def check_vt(url: str, timeout: int = 10) -> Dict:
             stats = attributes.get('stats', {})
             analysis_status = attributes.get('status', '')
             
-            # Se a análise não estiver completa, retorna UNKNOWN
+            # Se a análise não estiver completa após todas as tentativas, retorna UNKNOWN
+            # (Isso não deveria acontecer porque analyze_url agora aguarda até completar)
             if analysis_status != 'completed':
                 return {
                     "status": "UNKNOWN",
                     "reason": f"analysis_{analysis_status}",
                     "raw": {
                         "stats": stats,
-                        "message": f"Analysis status: {analysis_status}"
+                        "message": f"Analysis status: {analysis_status} (timeout após aguardar)"
                     },
                     "elapsed_ms": elapsed_ms
                 }

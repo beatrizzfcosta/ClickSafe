@@ -34,9 +34,16 @@ URL analisada: {url}
 Instruções de resposta organizada:
 1) Comece com um rótulo de risco: "SEGURO", "SUSPEITO" ou "MALICIOSO".
 2) Explique em 2–4 frases os motivos principais (cite as fontes que acusaram algo, se for o caso).
-3) Termine com uma recomendação prática de forma a conferir clareza e indicações sobre o que fazer (ex.: “evitar clicar”, “verificar remetente”, etc.).
+3) Termine com uma recomendação prática de forma a conferir clareza e indicações sobre o que fazer (ex.: "evitar clicar", "verificar remetente", etc.).
 Evite conceitos muito técnicos de froma excessiva e não inventes dados não fornecidos.
     """.strip()
+
+
+# Exportar build_prompt como função pública para uso em app.py
+def build_prompt(url: str, heuristics: Dict[str, Any], reputation: Dict[str, Any]) -> str:
+    """Função pública para construir o prompt."""
+    return _build_prompt(url, heuristics, reputation)
+
 
 def explain_result(url: str, heuristics: Dict, reputation: Dict) -> str:
     
