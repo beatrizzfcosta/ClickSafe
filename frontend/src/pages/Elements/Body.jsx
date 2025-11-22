@@ -4,7 +4,7 @@ function Body(){
     const [url, setURL] = useState('')
     const [response, setResponse] = useState(null)
 
-    const submit= async (e)=>{
+    const submit = async (e) => {
         e.preventDefault()
 
         if (!url){
@@ -15,11 +15,23 @@ function Body(){
         setResponse(null)
 
         try{
-            const result = app.py [url]
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+            const result = await fetch(`${apiUrl}/api/analyze`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ url: url })
+            })
 
-            setResponse(result)
+            if (!result.ok) {
+                throw new Error(`Erro do servidor: ${result.status}`)
+            }
+
+            const data = await result.json()
+            setResponse(data)
         } catch (e){
-            setResponse({error: "Problema no servidor"})
+            setResponse({error: `Problema no servidor: ${e.message}`})
         }
 
     }
@@ -28,12 +40,12 @@ function Body(){
         <>
             <main id="body">
                 <div className="URL">
-                    <form>
+                    <form onSubmit={submit}>
                         <input type="text" value={url} onChange={(e) => {
                             setURL(e.target.value)
                         }} placeholder="Enter website or URL here"/>
 
-                        <button type={submit}>
+                        <button type="submit">
                             submit
                         </button>
                     </form>
@@ -48,10 +60,41 @@ function Body(){
     )
 }
 
-const Resposta = ({response}) => (
-    <div>
-        <p>{response}</p>
-    </div>
-);
+const Resposta = ({response}) => {
+    if (!response) {
+        return null;
+    }
+
+    if (response.error) {
+        return (
+            <div style={{color: 'red'}}>
+                <p>Erro: {response.error}</p>
+            </div>
+        );
+    }
+
+    return (
+        <div>
+            <h3>Resultado da Análise</h3>
+            <p><strong>URL:</strong> {response.url}</p>
+            <p><strong>Score:</strong> {response.score?.toFixed(2)}/100</p>
+            {response.explanation && (
+                <p><strong>Explicação:</strong> {response.explanation}</p>
+            )}
+            {response.reputation_checks && response.reputation_checks.length > 0 && (
+                <div>
+                    <strong>Verificações de Reputação:</strong>
+                    <ul>
+                        {response.reputation_checks.map((check, index) => (
+                            <li key={index}>
+                                {check.source}: {check.status} ({check.reason})
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default Body
