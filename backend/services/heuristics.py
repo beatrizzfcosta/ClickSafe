@@ -1,5 +1,6 @@
 #imports necessários
-from datetime import datetime #para poder ver datas
+from datetime import datetime
+import re #para poder ver datas
 import whois  #para consulta de informações de domínio
 import tldextract  #para extrair partes do domínio
 import dns.resolver #para verificar registros DNS
@@ -823,7 +824,6 @@ def check_embedded_protocols(url):
 
 #--- mistura de idiomas---
 #para simplificacao, esta funcao ira apenas verificar se ha ingles e portugues na URL
-#tambem verifica se ha caracteres especiais de outros idiomas
 
 #palavras comuns portuguesas
 COMMON_PORTUGUESE_WORDS = {
@@ -851,16 +851,16 @@ def check_mixed_languages(url):
         return True  #mistura de idiomas encontrada
 
     #verifica se ha caracteres especiais de outros idiomas
-    for char in url:
-        if ord(char) > 127:
-            return True  #caracter especial encontrado
+    #for char in url:
+    #    if ord(char) > 127:
+    #        return True  #caracter especial encontrado
 
     return False  #sem mistura de idiomas ou caracteres especiais
 
 #pequenos testes
-print(check_mixed_languages("https://example.com/welcome/bem-vindo")) #--> True
-print(check_mixed_languages("https://example.com/conta/secure")) #--> True
-print(check_mixed_languages("https://example.com/page")) #--> False
+#print(check_mixed_languages("https://example.com/welcome/bem-vindo")) #--> True
+#print(check_mixed_languages("https://example.com/conta/secure")) #--> True
+#print(check_mixed_languages("https://example.com/page")) #--> False
     
 
 
@@ -878,10 +878,85 @@ def check_symbols_emojis(url):
 #print (check_symbols_emojis("https://exámple.com/page")) #--> True
 #print(check_symbols_emojis("https://example.com/page?")) #--> False
 
+
+
 #frases apelativas ou urgentes 
 
-#repeticao de palavras 
+APPEALING_PHRASES_ENGLISH = {
+    "act-now",
+    "limited-time",
+    "don't-miss",
+    "click-here",
+    "exclusive-offer",
+    "winner",
+    "congratulations",
+    "you've-won",
+    "claim-your-prize",
+    "urgent-action-required",
+}
 
+FRASES_APELATIVAS_PORTUGUES = {
+    "tempo-limitado",
+    "nao-perca",
+    "clique-aqui",
+    "oferta-exclusiva",
+    "vencedor",
+    "parabens",
+    "voce-ganhou",
+    "reclame-seu-premio",
+    "acao-urgente-necessaria",
+}
+
+def check_appealing_phrases(url):
+    url_lower = url.lower()
+
+    for phrase in APPEALING_PHRASES_ENGLISH:
+        if phrase in url_lower:
+            #frase apelativa encontrada
+            return True 
+    
+    for frase in FRASES_APELATIVAS_PORTUGUES:
+        if frase in url_lower:
+            #frase apelativa encontrada
+            return True  
+    
+    #nao encontrou frases apelativas
+    return False  
+
+#pequenos testes
+#print(check_appealing_phrases("https://example.com/act-now")) #--> True
+#print(check_appealing_phrases("https://example.com/parabens")) #--> True
+#print(check_appealing_phrases("https://example.com/page")) #--> False
+
+#repeticao de palavras 
+def check_repeated_words(url):
+    url_lower = url.lower()
+
+    # separar todas as palavras do URL
+    parts = re.split(r"[-_/?.=&%:]+", url_lower)
+    # tirar strings vazias
+    parts_finais = []
+    for item in parts:
+        if item != "":
+            parts_finais.append(item)
+
+    word_counts = {}
+    for word in parts_finais:
+        if word in word_counts:
+            word_counts[word] += 1
+            #se a palavra ja apareceu mais de 2 vezes, consideramos suspeito
+            if word_counts[word] > 2:
+                return True
+        else:
+            #a palvra surge pelo menos 1 vez
+            word_counts[word] = 1
+
+    #nenhuma palavra repetida excessivamente
+    return False
+
+#pequenos testes
+#print(check_repeated_words("https://example.com/free/free&free/prize")) #--> True
+#print(check_repeated_words("https://example.com/page")) #--> False
 
 
 #nota:
