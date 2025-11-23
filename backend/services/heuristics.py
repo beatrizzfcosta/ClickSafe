@@ -821,18 +821,68 @@ def check_embedded_protocols(url):
 
 #-------------------Padroes de engenharia social --------------------
 
-#mistura de idiomas
+#--- mistura de idiomas---
+#para simplificacao, esta funcao ira apenas verificar se ha ingles e portugues na URL
+#tambem verifica se ha caracteres especiais de outros idiomas
+
+#palavras comuns portuguesas
+COMMON_PORTUGUESE_WORDS = {
+    "bem-vindo", "conta", "senha", "segurança", "atualizar", "verificar", "clique", "aqui", "urgente", "oferta", "gratis", "premio", "dinheiro", "bonus",
+    "banco", "fatura", "factura", "pagamento", "seguro", "segura", "autenticacao", "confirmar", "actualizar", "atualizar",
+    "acesso", "dados", "cliente", "utilizador", "senha",
+}
+
+#palavras comuns inglesas
+COMMON_ENGLISH_WORDS = {
+    "welcome", "account", "password", "security", "update", "verify", "click", "here", "urgent", "offer", "free", "prize", "money", "bonus",
+    "bank", "billing", "payment", "secure", "authentication", "confirm",
+    "access", "data", "user", "username", 
+}
+
+def check_mixed_languages(url):
+    url_lower = url.lower()
+
+    #verifica se ha alguma palavra em portugues e/ou em ingles
+    found_portuguese = any(word in url_lower for word in COMMON_PORTUGUESE_WORDS)
+    found_english = any(word in url_lower for word in COMMON_ENGLISH_WORDS)
+
+    #verifica se ha palavras em pt e em
+    if found_portuguese and found_english:
+        return True  #mistura de idiomas encontrada
+
+    #verifica se ha caracteres especiais de outros idiomas
+    for char in url:
+        if ord(char) > 127:
+            return True  #caracter especial encontrado
+
+    return False  #sem mistura de idiomas ou caracteres especiais
+
+#pequenos testes
+print(check_mixed_languages("https://example.com/welcome/bem-vindo")) #--> True
+print(check_mixed_languages("https://example.com/conta/secure")) #--> True
+print(check_mixed_languages("https://example.com/page")) #--> False
+    
+
 
 #uso de simbolos ou emojis na URL
+#vamos verificar se link tem caracteres que nao sao ASCII
+def check_symbols_emojis(url):
+    for char in url:
+        #caracteres nao ascii estao fora do intervalo 0-127
+        if ord(char) > 127:  
+            return True
+    return False  
+
+#pequenos testes
+#print(check_symbols_emojis("https://example.com/😊")) #--> True
+#print (check_symbols_emojis("https://exámple.com/page")) #--> True
+#print(check_symbols_emojis("https://example.com/page?")) #--> False
 
 #frases apelativas ou urgentes 
 
 #repeticao de palavras 
 
-#imitacao de marcas conhecidas
 
 
-
-
-#funcao para retornar vetor de booleanos com os diferentes heuristicas analisadas
-#def analyze_url_heuristics(url):
+#nota:
+#imitacao de entidades legitimas - ja foi feito acima com imitacao de dominios conhecidos
