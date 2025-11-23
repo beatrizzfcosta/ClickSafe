@@ -41,7 +41,7 @@ function Body(){
             <main id="body">
                 <div className="URL">
                     <form onSubmit={submit}>
-                        <input type="text" value={url} onChange={(e) => {
+                        <input type="text" value={url} size={url.length} onChange={(e) => {
                             setURL(e.target.value)
                         }} placeholder="Enter website or URL here"/>
 
@@ -67,7 +67,7 @@ const Resposta = ({response}) => {
 
     if (response.error) {
         return (
-            <div style={{color: 'red'}}>
+            <div style={{color: '#800020'}}>
                 <p>Erro: {response.error}</p>
             </div>
         );

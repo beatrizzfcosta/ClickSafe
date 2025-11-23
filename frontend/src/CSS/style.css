@@ -1,14 +1,102 @@
+/*Estilo do site em geral*/
 html, body, #root{
     padding: 10px;
     text-align: center;
     background-color: #F0E7D5 ;
 }
 
+/*HEADER*/
+
 header {
     background-color: #212842;
 }
 
+.header{
+    padding: 10px;
+    color: #F0E7D5;
+}
 
+/*NavBar*/
+
+.nav{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    color: #F0E7D5;
+}
+
+/*conteudo da NavBar*/
+.links {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    background-color: #F0E7D5;
+    display: flex;
+    width: 100%;
+}
+
+.links li {
+    flex-grow: 1;
+    text-align: center;
+}
+
+.links li a {
+    display: block;
+    color: #212842;
+    text-align: center;
+    padding: 14px 16px;
+    text-decoration: none;
+}
+
+.links li a:hover {
+    background-color: #212842;
+    color: #F0E7D5;
+}
+
+/*BODY*/
+
+main {
+    background-color: #212842;
+    flex-grow: 1;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+/*Submit*/
+
+input{
+    background-color: #F0E7D5;
+    min-width: 250px;
+    min-height: 30px;
+    text-align: center;
+    color: #212842;
+}
+
+button{
+    background-color: #F0E7D5;
+    min-height: 35px;
+    color: #212842;
+}
+
+main .URL{
+    padding-bottom: 10px;
+}
+
+/*Resposta*/
+main .resposta{
+    padding: 10px;
+    background-color: #F0E7D5;
+    min-height: 260px;
+}
+
+/*BODY SOBRE*/
+
+.sobre div{
+    padding: 10px;
+    background-color: #F0E7D5;
+}
+
+/*FOOTER*/
 footer {
     background-color: #212842;
     color: #F0E7D5;
@@ -26,63 +114,4 @@ footer {
 .seccao-membro{
     padding: 5px 7px;
     flex-grow: 0;
-}
-
-.header{
-    padding: 10px;
-    color: #F0E7D5;
-}
-
-.nav{
-    display: flex;
-    flex-wrap: wrap;
-    gap: 20px;
-    color: #F0E7D5;
-}
-
-input{
-    background-color: #F0E7D5;
-    min-width: 250px;
-    min-height: 30px;
-    text-align: center;
-}
-
-main {
-    background-color: #212842;
-}
-
-main .resposta{
-    padding: 5px 0px;
-    background-color: #F0E7D5;
-}
-
-main .URL{
-    padding-bottom: 10px;
-}
-
-ul {
-    list-style-type: none;
-    margin: 0;
-    padding: 0;
-    background-color: #F0E7D5;
-    display: flex;
-    width: 100%;
-}
-
-ul li {
-    flex-grow: 1;
-    text-align: center;
-}
-
-ul li a {
-    display: block;
-    color: #212842;
-    text-align: center;
-    padding: 14px 16px;
-    text-decoration: none;
-}
-
-ul li a:hover {
-    background-color: #212842;
-    color: #F0E7D5;
 }

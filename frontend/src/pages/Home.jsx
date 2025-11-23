@@ -5,10 +5,11 @@ function Home() {
 
     return (
         <>
-            <Header />
-            <Body />
-            <Footer />
-
+            <div className="home">
+                <Header />
+                <Body />
+                <Footer />
+            </div>
         </>
     )
 }
