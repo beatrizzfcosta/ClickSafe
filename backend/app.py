@@ -126,19 +126,18 @@ def calculate_final_score(
 def _get_heuristics_config() -> dict:
     """
     Busca todas as configurações de heurísticas do banco de dados.
-    Retorna um dicionário: {code: {"severity": str, "weight": float}}
+    Retorna um dicionário: {code: {"severity": str}}
     """
     from storage.db import get_db
     config = {}
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT code, default_severity, default_weight FROM heuristics"
+            "SELECT code, default_severity FROM heuristics"
         )
         for row in cursor.fetchall():
             config[row[0]] = {
-                "severity": row[1],
-                "weight": row[2]
+                "severity": row[1]
             }
     return config
 
@@ -210,9 +209,22 @@ async def run_heuristics(url: str) -> dict:
     # Busca configurações de todas as heurísticas de uma vez
     heuristics_config = _get_heuristics_config()
     
+    # Valores simplificados por severidade (quando acionadas)
+    # Fórmula simples: soma direta, máximo 100
+    SEVERITY_SCORES = {
+        "LOW": 5.0,      # 5 pontos por heurística LOW
+        "MEDIUM": 15.0,  # 15 pontos por heurística MEDIUM
+        "HIGH": 40.0,    # 40 pontos por heurística HIGH
+        "CRITICAL": 70.0 # 70 pontos por heurística CRITICAL
+    }
+    
     hits = []
-    total_weight = 0.0
-    weighted_score = 0.0
+    score_by_severity = {
+        "LOW": 0,
+        "MEDIUM": 0,
+        "HIGH": 0,
+        "CRITICAL": 0
+    }
     
     # Executa cada heurística
     for func, code, args, description in heuristics_map:
@@ -220,16 +232,17 @@ async def run_heuristics(url: str) -> dict:
             # Chama a função
             result = func(*args)
             
-            # Busca configuração da heurística (severidade e peso)
-            config = heuristics_config.get(code, {"severity": "MEDIUM", "weight": 0.1})
+            # Busca configuração da heurística (severidade)
+            config = heuristics_config.get(code, {"severity": "MEDIUM"})
             severity = config["severity"]
-            weight = config["weight"]
             
             # Interpreta o resultado
             # True = acionada (risco), False = não acionada (seguro), None = erro/indeterminado
             if result is True:
                 triggered = True
                 details = f"{description}: detectado"
+                # Conta quantas heurísticas dessa severidade foram acionadas
+                score_by_severity[severity] += 1
             elif result is False:
                 triggered = False
                 details = f"{description}: não detectado"
@@ -238,39 +251,51 @@ async def run_heuristics(url: str) -> dict:
                 triggered = False
                 details = f"{description}: erro na verificação"
             
-            # Adiciona ao resultado
+            # Adiciona ao resultado (sem weight)
             hits.append({
                 "code": code,
                 "severity": severity,
                 "triggered": triggered,
-                "details": details,
-                "weight": weight
+                "details": details
             })
-            
-            # Calcula score ponderado
-            # Se acionada, contribui com o peso * 100 (score máximo)
-            if triggered:
-                weighted_score += weight * 100
-            total_weight += weight
             
         except Exception as e:
             print(f"⚠ Erro ao executar heurística {code}: {e}")
             # Em caso de erro, adiciona como não acionada
-            config = heuristics_config.get(code, {"severity": "MEDIUM", "weight": 0.1})
+            config = heuristics_config.get(code, {"severity": "MEDIUM"})
             hits.append({
                 "code": code,
                 "severity": config["severity"],
                 "triggered": False,
-                "details": f"Erro: {str(e)}",
-                "weight": config["weight"]
+                "details": f"Erro: {str(e)}"
             })
     
-    # Calcula score final (0-100)
-    # Normaliza pelo peso total se necessário
-    if total_weight > 0:
-        final_score = min(100.0, weighted_score / total_weight if total_weight > 1.0 else weighted_score)
+    # Calcula score final de forma simples: soma direta dos pontos
+    final_score = 0.0
+    score_breakdown = {}
+    
+    for severity, count in score_by_severity.items():
+        if count > 0:
+            points = count * SEVERITY_SCORES[severity]
+            final_score += points
+            score_breakdown[severity] = {
+                "count": count,
+                "points_per_item": SEVERITY_SCORES[severity],
+                "total_points": points
+            }
+    
+    # Limita o máximo a 100
+    final_score = min(100.0, final_score)
+    
+    # Log do cálculo (simplificado)
+    print(f"\n Cálculo do Score de Heurísticas:")
+    if score_breakdown:
+        for severity, breakdown in score_breakdown.items():
+            print(f"   {severity}: {breakdown['count']} heurística(s) × {breakdown['points_per_item']} = {breakdown['total_points']} pontos")
+        print(f"   Score total: {final_score:.2f}/100")
     else:
-        final_score = 0.0
+        print(f"   Nenhuma heurística acionada")
+        print(f"   Score: 0.00/100")
     
     return {
         "score": final_score,
@@ -307,7 +332,13 @@ async def analyze_url(url: str) -> dict:
     # _score vem de 0.0-1.0, converter para 0-100
     reputation_score = rep_result["_score"] * 100
     final_reputation_status = rep_result.get("final_status", "UNKNOWN")
-    heuristics_score = heuristics_result["score"] if heuristics_result["hits"] else None
+    # Score de heurísticas (sempre existe, será 0.0 se nenhuma acionada)
+    heuristics_score = heuristics_result.get("score", 0.0)
+    
+    # Log dos scores individuais
+    print(f"\nScores Individuais:")
+    print(f"   Reputação: {reputation_score:.2f}/100")
+    print(f"   Heurísticas: {heuristics_score:.2f}/100")
     
     # Calcula score final combinado
     final_score = calculate_final_score(
@@ -315,10 +346,17 @@ async def analyze_url(url: str) -> dict:
         heuristics_score=heuristics_score
     )
     
+    # Log do cálculo final
+    print(f"\n Cálculo do Score Final:")
+    print(f"   (Reputação × 70%) + (Heurísticas × 30%)")
+    print(f"   ({reputation_score:.2f} × 0.7) + ({heuristics_score:.2f} × 0.3)")
+    print(f"   = {reputation_score * 0.7:.2f} + {heuristics_score * 0.3:.2f}")
+    print(f"   = {final_score:.2f}/100")
+    
     # Gera explicação usando IA (xai)
     print("Gerando explicação com IA...")
     try:
-        explanation = explain_result(url, heuristics_result, rep_result)
+        explanation = explain_result(url, heuristics_result, rep_result, final_score)
         print("✓ Explicação gerada com sucesso")
     except Exception as e:
         print(f"⚠ Erro ao gerar explicação com IA: {e}")
@@ -419,7 +457,7 @@ async def analyze_url(url: str) -> dict:
     print("Salvando requisição de IA...")
     try:
         from services.xai import MODEL, build_prompt
-        prompt = build_prompt(url, heuristics_result, rep_result)
+        prompt = build_prompt(url, heuristics_result, rep_result, final_score)
         insert_ai_request(
             analysis_id=analysis_id,
             model=MODEL,
@@ -501,7 +539,7 @@ async def main():
                 print(f"\nExplicação (IA):")
                 print(f"   {result['explanation']}")
             
-            print("\n🔍 Detalhes das verificações:")
+            print("\n Detalhes das verificações:")
             for check in result['reputation_checks']:
                 elapsed = check.get('elapsed_ms')
                 elapsed_str = f"{elapsed}ms" if elapsed else "N/A"
