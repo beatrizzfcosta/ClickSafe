@@ -60,14 +60,28 @@ def normalize_url(url: str) -> str:
     """
     Normaliza uma URL para comparação e armazenamento.
     Remove trailing slash, converte host para lowercase, etc.
+    Adiciona https:// se a URL não tiver scheme.
     """
+    # Se a URL não tiver scheme, adiciona https://
+    if not url.startswith(('http://', 'https://')):
+        url = f"https://{url}"
+    
     parsed = urlparse(url)
+    
+    # Se ainda não tiver scheme após parse, adiciona https://
+    if not parsed.scheme:
+        url = f"https://{url}"
+        parsed = urlparse(url)
+    
     # Normaliza o host para lowercase
     normalized_host = parsed.netloc.lower()
+    
     # Remove trailing slash do path (exceto se for apenas /)
-    normalized_path = parsed.path.rstrip('/')
+    normalized_path = parsed.path.rstrip('/') if parsed.path else ""
+    
     # Reconstrói a URL normalizada
-    normalized = f"{parsed.scheme}://{normalized_host}{normalized_path}"
+    scheme = parsed.scheme or "https"
+    normalized = f"{scheme}://{normalized_host}{normalized_path}"
     if parsed.query:
         normalized += f"?{parsed.query}"
     if parsed.fragment:
@@ -323,10 +337,10 @@ async def analyze_url(url: str) -> dict:
     print(f"Analisando URL: {url}")
     print(f"Normalizada: {normalized_url}")
     
-    rep_result = await consolidate_reputation(url)
+    rep_result = await consolidate_reputation(normalized_url)
     
-    # Executa heurísticas
-    heuristics_result = await run_heuristics(url)
+    # Executa heurísticas (usa URL normalizada)
+    heuristics_result = await run_heuristics(normalized_url)
     
     # Calcula scores
     # _score vem de 0.0-1.0, converter para 0-100
@@ -356,7 +370,7 @@ async def analyze_url(url: str) -> dict:
     # Gera explicação usando IA (xai)
     print("Gerando explicação com IA...")
     try:
-        explanation = explain_result(url, heuristics_result, rep_result, final_score)
+        explanation = explain_result(normalized_url, heuristics_result, rep_result, final_score)
         print("✓ Explicação gerada com sucesso")
     except Exception as e:
         print(f"⚠ Erro ao gerar explicação com IA: {e}")
