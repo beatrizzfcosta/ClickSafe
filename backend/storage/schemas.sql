@@ -78,9 +78,7 @@ CREATE TABLE IF NOT EXISTS heuristics (
   category          TEXT    NOT NULL,               -- ex.: 'DOMAIN', 'PATH', 'PARAMS', 'GENERAL'
   description       TEXT    NOT NULL,               -- descrição da heurística
   default_severity  TEXT    NOT NULL                -- 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'
-                    CHECK (default_severity IN ('LOW','MEDIUM','HIGH','CRITICAL')),
-  default_weight    REAL    NOT NULL                -- peso padrão para cálculo de score
-                    CHECK (default_weight >= 0 AND default_weight <= 1)
+                    CHECK (default_severity IN ('LOW','MEDIUM','HIGH','CRITICAL'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_heuristics_code     ON heuristics (code);
