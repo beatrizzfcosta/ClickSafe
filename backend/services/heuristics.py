@@ -685,19 +685,35 @@ def check_sensitive_parameters(parametros):
 # --- valores demasiado longos ou codificados ---
 #asumimos que valores com mais de 100 caracteres ou que parecem codificados em base64 são suspeitos
 def check_long_encoded_parameters(parametros):
+    # Se não há parâmetros, retorna False
+    if not parametros or not parametros.strip():
+        return False
+    
     #divide os parametros pelo '&'
     params_list = parametros.split('&')
 
     for param in params_list:
-        valor_param = param.split('=')[1] 
+        # Verifica se o parâmetro tem '=' (tem valor)
+        if '=' not in param:
+            continue
+        
+        partes = param.split('=', 1)  # Divide apenas no primeiro '='
+        if len(partes) < 2:
+            continue
+            
+        valor_param = partes[1]
 
         #verifica se o valor é demasiado longo (mais de 100 caracteres)
         if len(valor_param) > 100:
             return True  #parametro com valor demasiado longo encontrado
         
         #verifica se o valor parece estar codificado em base64 (caracteres comuns)
-        if len(valor_param) % 4 == 0 and base64.b64decode(valor_param, validate=True):
-            return True  #parametro com valor possivelmente codificado encontrado
+        try:
+            if len(valor_param) % 4 == 0 and base64.b64decode(valor_param, validate=True):
+                return True  #parametro com valor possivelmente codificado encontrado
+        except Exception:
+            # Se não conseguir decodificar, não é base64 válido
+            pass
     return False  #nenhum parametro suspeito encontrado
 
 #pequeno teste

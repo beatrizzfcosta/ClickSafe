@@ -19,6 +19,41 @@ from storage.db import (
 )
 from services.reputation import consolidate_reputation
 from services.xai import explain_result
+from services.heuristics import (
+    extract_url_components,
+    # Domain heuristics
+    check_domain_age_recent,
+    check_domain_age_expiring,
+    check_suspicious_tld,
+    check_ip_instead_of_domain,
+    check_similar_known_domains,
+    check_subdomains_sublevels,
+    check_domain_hyphens,
+    usa_https,
+    certificado_ssl_ok,
+    check_dns_records,
+    check_suspicious_server_location,
+    # Path heuristics
+    check_long_path,
+    check_admin_paths,
+    check_suspicious_filenames,
+    check_executable_extensions,
+    check_social_engineering_path,
+    # Parameters heuristics
+    check_excessive_parameters,
+    check_sensitive_parameters,
+    check_long_encoded_parameters,
+    check_redirect_parameters,
+    check_personal_data_parameters,
+    # General heuristics
+    check_url_shortener,
+    check_multiple_redirects,
+    check_embedded_protocols,
+    check_mixed_languages,
+    check_symbols_emojis,
+    check_appealing_phrases,
+    check_repeated_words,
+)
 
 
 def normalize_url(url: str) -> str:
@@ -88,6 +123,26 @@ def calculate_final_score(
     return max(0.0, min(100.0, final_score))
 
 
+def _get_heuristics_config() -> dict:
+    """
+    Busca todas as configurações de heurísticas do banco de dados.
+    Retorna um dicionário: {code: {"severity": str, "weight": float}}
+    """
+    from storage.db import get_db
+    config = {}
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT code, default_severity, default_weight FROM heuristics"
+        )
+        for row in cursor.fetchall():
+            config[row[0]] = {
+                "severity": row[1],
+                "weight": row[2]
+            }
+    return config
+
+
 async def run_heuristics(url: str) -> dict:
     """
     Executa todas as heurísticas na URL.
@@ -105,17 +160,121 @@ async def run_heuristics(url: str) -> dict:
                 ...
             ]
         }
-    
-    Por enquanto retorna stub (preparado para implementação futura).
     """
-    # TODO: Implementar heurísticas quando o módulo estiver pronto
-    # from services.heuristics import analyze_heuristics
-    # return await analyze_heuristics(url)
+    # Extrai componentes da URL
+    dominio, caminho, parametros = extract_url_components(url)
     
-    # Stub: retorna score neutro e lista vazia
+    # Mapeamento de funções para códigos de heurísticas
+    # Formato: (função, código_heurística, argumentos, descrição)
+    heuristics_map = [
+        # Domain Heuristics
+        (check_domain_age_recent, "DOMAIN_AGE", (dominio,), "Domínio muito recente"),
+        (check_domain_age_expiring, "DOMAIN_EXPIRATION", (dominio,), "Domínio prestes a expirar"),
+        (check_suspicious_tld, "DOMAIN_TLD_RISK", (dominio,), "TLD suspeito"),
+        (check_ip_instead_of_domain, "DOMAIN_IS_IP_ADDRESS", (dominio,), "Domínio é endereço IP"),
+        (check_similar_known_domains, "DOMAIN_SIMILAR_TO_BRAND", (dominio,), "Similaridade com marca conhecida"),
+        (check_subdomains_sublevels, "DOMAIN_MULTIPLE_SUBLEVELS", (dominio,), "Múltiplos subníveis"),
+        (check_domain_hyphens, "DOMAIN_HYPHENS_USAGE", (dominio,), "Uso de hífens no domínio"),
+        # DOMAIN_HAS_HTTPS: acionada quando NÃO tem HTTPS (inversão)
+        (lambda u: not usa_https(u), "DOMAIN_HAS_HTTPS", (url,), "Ausência de HTTPS"),
+        # DOMAIN_SSL_INVALID: acionada quando SSL é inválido (inversão)
+        (lambda u: certificado_ssl_ok(u) is False, "DOMAIN_SSL_INVALID", (url,), "Certificado SSL inválido"),
+        # DOMAIN_DNS_ANOMALY: acionada quando há anomalia (False ou None)
+        (lambda d: check_dns_records(d) is not True, "DOMAIN_DNS_ANOMALY", (dominio,), "Anomalia DNS"),
+        (check_suspicious_server_location, "DOMAIN_GEOLOCATION_RISK", (dominio,), "Risco de geolocalização"),
+        
+        # Path Heuristics
+        (check_long_path, "PATH_LENGTH_EXCESSIVE", (caminho,), "Caminho muito longo"),
+        (check_admin_paths, "PATH_ADMIN_DIRECTORIES", (caminho,), "Diretórios administrativos"),
+        (check_suspicious_filenames, "PATH_SUSPICIOUS_TERMS", (caminho,), "Termos suspeitos no caminho"),
+        (check_executable_extensions, "PATH_EXECUTABLE_DISGUISED", (caminho,), "Executável disfarçado"),
+        (check_social_engineering_path, "PATH_SOCIAL_ENGINEERING_TERMS", (caminho,), "Termos de engenharia social"),
+        
+        # Parameters Heuristics
+        (check_excessive_parameters, "PARAMS_EXCESSIVE_NUMBER", (parametros,), "Número excessivo de parâmetros"),
+        (check_sensitive_parameters, "PARAMS_SENSITIVE_VARIABLES", (parametros,), "Variáveis sensíveis"),
+        (check_long_encoded_parameters, "PARAMS_LONG_OR_ENCODED_VALUES", (parametros,), "Valores longos ou codificados"),
+        (check_redirect_parameters, "PARAMS_REDIRECT_KEYWORD", (parametros,), "Palavra-chave de redirecionamento"),
+        (check_personal_data_parameters, "PARAMS_PERSONAL_DATA_INCLUDED", (parametros,), "Dados pessoais incluídos"),
+        
+        # General Heuristics
+        (check_url_shortener, "SHORTENER_USAGE", (dominio,), "Uso de encurtador"),
+        (check_multiple_redirects, "MULTIPLE_REDIRECTS", (url,), "Múltiplos redirecionamentos"),
+        (check_embedded_protocols, "EMBEDDED_PROTOCOLS", (url,), "Protocolos embutidos"),
+        (check_mixed_languages, "LANGUAGE_MIX", (url,), "Mistura de idiomas"),
+        (check_symbols_emojis, "EMOJI_OR_SYMBOL_USAGE", (url,), "Uso de emoji ou símbolos"),
+        (check_appealing_phrases, "ATTRACTIVE_PHRASES", (url,), "Frases atrativas"),
+        (check_repeated_words, "KEYWORD_REPETITION", (url,), "Repetição de palavras-chave"),
+    ]
+    
+    # Busca configurações de todas as heurísticas de uma vez
+    heuristics_config = _get_heuristics_config()
+    
+    hits = []
+    total_weight = 0.0
+    weighted_score = 0.0
+    
+    # Executa cada heurística
+    for func, code, args, description in heuristics_map:
+        try:
+            # Chama a função
+            result = func(*args)
+            
+            # Busca configuração da heurística (severidade e peso)
+            config = heuristics_config.get(code, {"severity": "MEDIUM", "weight": 0.1})
+            severity = config["severity"]
+            weight = config["weight"]
+            
+            # Interpreta o resultado
+            # True = acionada (risco), False = não acionada (seguro), None = erro/indeterminado
+            if result is True:
+                triggered = True
+                details = f"{description}: detectado"
+            elif result is False:
+                triggered = False
+                details = f"{description}: não detectado"
+            else:  # None ou erro
+                # Em caso de erro, não considera como acionada mas registra
+                triggered = False
+                details = f"{description}: erro na verificação"
+            
+            # Adiciona ao resultado
+            hits.append({
+                "code": code,
+                "severity": severity,
+                "triggered": triggered,
+                "details": details,
+                "weight": weight
+            })
+            
+            # Calcula score ponderado
+            # Se acionada, contribui com o peso * 100 (score máximo)
+            if triggered:
+                weighted_score += weight * 100
+            total_weight += weight
+            
+        except Exception as e:
+            print(f"⚠ Erro ao executar heurística {code}: {e}")
+            # Em caso de erro, adiciona como não acionada
+            config = heuristics_config.get(code, {"severity": "MEDIUM", "weight": 0.1})
+            hits.append({
+                "code": code,
+                "severity": config["severity"],
+                "triggered": False,
+                "details": f"Erro: {str(e)}",
+                "weight": config["weight"]
+            })
+    
+    # Calcula score final (0-100)
+    # Normaliza pelo peso total se necessário
+    if total_weight > 0:
+        final_score = min(100.0, weighted_score / total_weight if total_weight > 1.0 else weighted_score)
+    else:
+        final_score = 0.0
+    
     return {
-        "score": 50.0,  # Score neutro quando não há heurísticas
-        "hits": []
+        "score": final_score,
+        "hits": hits
     }
 
 

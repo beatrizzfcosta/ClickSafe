@@ -63,6 +63,7 @@ def init_db(db_path: str = DB_PATH, schema_path: Path = SCHEMA_PATH) -> None:
             WHERE type='table' AND name='reputation_checks'
         """)
         table_exists = cursor.fetchone() is not None
+        backup_created = False
         
         if table_exists:
             # Check if the constraint needs updating by trying to read the schema
@@ -77,6 +78,7 @@ def init_db(db_path: str = DB_PATH, schema_path: Path = SCHEMA_PATH) -> None:
                     CREATE TABLE IF NOT EXISTS reputation_checks_backup AS 
                     SELECT * FROM reputation_checks
                 """)
+                backup_created = True
             
             # Drop the old table
             cursor.execute("DROP TABLE IF EXISTS reputation_checks")
@@ -89,7 +91,7 @@ def init_db(db_path: str = DB_PATH, schema_path: Path = SCHEMA_PATH) -> None:
         conn.executescript(schema_sql)
         
         # Restore data if it was backed up
-        if table_exists:
+        if backup_created:
             cursor.execute("SELECT COUNT(*) FROM reputation_checks_backup")
             backup_count = cursor.fetchone()[0]
             if backup_count > 0:
@@ -101,8 +103,8 @@ def init_db(db_path: str = DB_PATH, schema_path: Path = SCHEMA_PATH) -> None:
                     FROM reputation_checks_backup
                     WHERE source IN ('VIRUSTOTAL', 'APIVOID', 'GOOGLE_SAFE_BROWSING')
                 """)
-                cursor.execute("DROP TABLE IF EXISTS reputation_checks_backup")
-                conn.commit()
+            cursor.execute("DROP TABLE IF EXISTS reputation_checks_backup")
+            conn.commit()
         
         # Popular tabela heuristics
         if seed_path.exists():
