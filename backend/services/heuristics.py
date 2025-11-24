@@ -95,7 +95,7 @@ def check_domain_age_expiring(dominio):
 # --- dominios de nivel superior (TLD) suspeitos (.tk, .ml, .ga, .cf, .gq) ---
 
 #definimos uma lista com os dominios suspeitos 
-TLD_SUSPEITOS = {"tk", "ml", "ga", "cf", "gq", "zip", "xyz", "top", "loan", "click", "info", "biz", "date", "win", "party", "link", "club",}
+TLD_SUSPEITOS = {"tk", "ml", "ga", "cf", "gq", "zip", "xyz", "top", "loan", "click", "info", "biz", "date", "win", "party", "link", "club", "me"}
 
 def check_suspicious_tld(dominio):
     #extrai o TLD usando biblioteca tldextract
@@ -623,15 +623,29 @@ SOCIAL_ENGINEERING_KEYWORDS = {
     "buy",
     "purchase",
     "discount",
+    "booking",  # Termos relacionados a reservas falsas (phishing de hotéis/viagens)
+    "reservation",
+    "confirm",
+    "verify",
+    "update",
 }
 def check_social_engineering_path(caminho):
 
     partes = caminho.split('/')
+    caminho_lower = caminho.lower()
 
     #verifica se algum dos termos de engenharia social está presente no caminho
+    # Primeiro verifica se o termo está como parte separada
     for termo in partes:
-        if termo in SOCIAL_ENGINEERING_KEYWORDS:
+        if termo.lower() in SOCIAL_ENGINEERING_KEYWORDS:
             return True  #caminho suspeito
+    
+    # Depois verifica se algum termo está contido dentro de outras palavras
+    # (ex: "booking" em "FranciscaBooking_FN")
+    for termo in SOCIAL_ENGINEERING_KEYWORDS:
+        if termo in caminho_lower:
+            return True  #termo suspeito encontrado no caminho
+    
     return False  #caminho normal   
 
 #pequenos testes
@@ -775,6 +789,7 @@ URL_SHORTENERS = {
     "goo.gl",
     "ow.ly",
     "t.co",
+    "t.me",  # Telegram - pode ser usado para ocultar URLs
     "is.gd",
     "buff.ly",
     "adf.ly",
