@@ -1,4 +1,5 @@
 import NavBar from "./NavBar.jsx";
+import clicksafe from '../../assets/ClickSafeSemBackground.png'
 
 function Header() {
 
@@ -6,8 +7,8 @@ function Header() {
         <>
             <header>
                 <div className="header">
-                    <h1>ClickSafe</h1>
-                    <NavBar />
+                    <img src={clicksafe} style={{height: '150px', display: 'block', margin: '0 auto'}}/>
+                    <NavBar/>
                 </div>
             </header>
         </>

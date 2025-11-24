@@ -43,10 +43,10 @@ function Body(){
                     <form onSubmit={submit}>
                         <input type="text" value={url} size={url.length} onChange={(e) => {
                             setURL(e.target.value)
-                        }} placeholder="Enter website or URL here"/>
+                        }} placeholder="Coloque o site ou URL aqui"/>
 
                         <button type="submit">
-                            submit
+                            submeter
                         </button>
                     </form>
 
