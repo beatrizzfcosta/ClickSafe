@@ -121,7 +121,7 @@ const Resposta = ({response}) => {
                     <strong>Verificações:</strong>
                     <ul>
                         {response.reputation_checks.map((check, index) => (
-                            <li key={index}>
+                            <li key={index} style={{textAlign: 'center', listStyleType: 'none'}}>
                                 {check.source}: {check.status === 'POSITIVE' ? 'Malicioso' : 
                                                  check.status === 'NEGATIVE' ? 'Seguro' : '? Indeterminado'} 
                                 ({check.reason})
