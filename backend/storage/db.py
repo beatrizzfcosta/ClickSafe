@@ -114,10 +114,7 @@ def init_db(db_path: str = DB_PATH, schema_path: Path = SCHEMA_PATH) -> None:
         
         print(f"Banco de dados inicializado em: {db_path}")
 
-
-# ============================================
 # Funções auxiliares
-# ============================================
 
 def extract_hostname(url: str) -> str:
     """Extrai o hostname de uma URL."""
@@ -135,13 +132,7 @@ def get_or_create_link(
 ) -> int:
     """
     Busca ou cria um link no banco de dados.
-    
-    Args:
-        url: URL original
-        normalized_url: URL normalizada
-        
-    Returns:
-        ID do link
+    Retorna o ID do link.
     """
     with get_db(db_path) as conn:
         cursor = conn.cursor()
@@ -161,9 +152,7 @@ def get_or_create_link(
         return cursor.lastrowid
 
 
-# ============================================
 # Funções de inserção
-# ============================================
 
 def insert_analysis(
     url: str,
@@ -174,15 +163,7 @@ def insert_analysis(
 ) -> int:
     """
     Insere uma nova análise no banco de dados.
-    
-    Args:
-        url: URL original
-        normalized_url: URL normalizada
-        score: Score de risco (0-100)
-        explanation: Explicação textual gerada pela IA
-        
-    Returns:
-        ID da análise inserida
+    Retorna o ID da análise inserida.
     """
     link_id = get_or_create_link(url, normalized_url, db_path)
     
@@ -206,17 +187,7 @@ def insert_reputation_check(
 ) -> int:
     """
     Insere uma verificação de reputação.
-    
-    Args:
-        analysis_id: ID da análise relacionada
-        source: Fonte ('VIRUSTOTAL', 'APIVOID', 'GOOGLE_SAFE_BROWSING')
-        status: Status ('POSITIVE', 'NEGATIVE')
-        raw_json: Resposta JSON completa da API
-        reason: Razão (opcional, ex: 'timeout', 'ok')
-        elapsed_ms: Tempo de resposta em milissegundos
-        
-    Returns:
-        ID da verificação inserida
+    retorna o ID da verificação inserida.
     """
     with get_db(db_path) as conn:
         cursor = conn.cursor()
@@ -238,16 +209,7 @@ def insert_heuristic_hit(
 ) -> int:
     """
     Insere um resultado de heurística.
-    
-    Args:
-        analysis_id: ID da análise relacionada
-        heuristic_code: Código da heurística (ex: 'DOMAIN_AGE', 'PATH_LENGTH_EXCESSIVE')
-        severity: Severidade ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')
-        triggered: Se a heurística foi acionada (True/False)
-        details: Detalhes adicionais (opcional)
-        
-    Returns:
-        ID do resultado inserido
+    retorna o ID do resultado inserido
     """
     with get_db(db_path) as conn:
         cursor = conn.cursor()
@@ -280,17 +242,7 @@ def insert_ai_request(
 ) -> int:
     """
     Insere uma requisição de IA.
-    
-    Args:
-        analysis_id: ID da análise relacionada
-        model: Modelo de IA usado (ex: 'gpt-4', 'claude-3')
-        prompt: Prompt enviado à IA
-        response: Resposta da IA
-        risk_score: Score de risco calculado pela IA (0-100, opcional)
-        meta: Metadados adicionais em JSON (opcional)
-        
-    Returns:
-        ID da requisição inserida
+    retorna o ID da requisição inserida
     """
     with get_db(db_path) as conn:
         cursor = conn.cursor()
@@ -302,16 +254,12 @@ def insert_ai_request(
         return cursor.lastrowid
 
 
-# ============================================
 # Funções de consulta
-# ============================================
 
 def get_analysis_by_id(analysis_id: int, db_path: str = DB_PATH) -> Optional[Dict[str, Any]]:
     """
     Busca uma análise pelo ID, incluindo informações do link.
-    
-    Returns:
-        Dicionário com os dados da análise e do link, ou None se não encontrado
+    retorna o dicionário com os dados da análise e do link, ou None se não encontrado
     """
     with get_db(db_path) as conn:
         cursor = conn.cursor()
@@ -328,9 +276,7 @@ def get_analysis_by_id(analysis_id: int, db_path: str = DB_PATH) -> Optional[Dic
 def get_analysis_by_url(normalized_url: str, db_path: str = DB_PATH) -> Optional[Dict[str, Any]]:
     """
     Busca a análise mais recente de uma URL normalizada.
-    
-    Returns:
-        Dicionário com os dados da análise e do link, ou None se não encontrado
+    retorna o Dicionário com os dados da análise e do link, ou None se não encontrado
     """
     with get_db(db_path) as conn:
         cursor = conn.cursor()
@@ -349,9 +295,7 @@ def get_analysis_by_url(normalized_url: str, db_path: str = DB_PATH) -> Optional
 def get_reputation_checks(analysis_id: int, db_path: str = DB_PATH) -> List[Dict[str, Any]]:
     """
     Busca todas as verificações de reputação de uma análise.
-    
-    Returns:
-        Lista de dicionários com os dados das verificações
+    retorna uma Lista de dicionários com os dados das verificações
     """
     with get_db(db_path) as conn:
         cursor = conn.cursor()
@@ -366,9 +310,7 @@ def get_reputation_checks(analysis_id: int, db_path: str = DB_PATH) -> List[Dict
 def get_heuristics_hits(analysis_id: int, db_path: str = DB_PATH) -> List[Dict[str, Any]]:
     """
     Busca todos os resultados de heurísticas de uma análise, incluindo informações da heurística.
-    
-    Returns:
-        Lista de dicionários com os dados das heurísticas e informações de referência
+    retorna uma Lista de dicionários com os dados das heurísticas e informações de referência
     """
     with get_db(db_path) as conn:
         cursor = conn.cursor()
@@ -390,9 +332,7 @@ def get_heuristics_hits(analysis_id: int, db_path: str = DB_PATH) -> List[Dict[s
 def get_ai_requests(analysis_id: int, db_path: str = DB_PATH) -> List[Dict[str, Any]]:
     """
     Busca todas as requisições de IA de uma análise.
-    
-    Returns:
-        Lista de dicionários com os dados das requisições de IA
+    retorna uma lista de dicionários com os dados das requisições de IA
     """
     with get_db(db_path) as conn:
         cursor = conn.cursor()
@@ -407,9 +347,7 @@ def get_ai_requests(analysis_id: int, db_path: str = DB_PATH) -> List[Dict[str, 
 def get_full_analysis(analysis_id: int, db_path: str = DB_PATH) -> Optional[Dict[str, Any]]:
     """
     Busca uma análise completa com todas as informações relacionadas.
-    
-    Returns:
-        Dicionário com análise, link, verificações de reputação, heurísticas e requisições de IA
+    retorna o Dicionário com análise, link, verificações de reputação, heurísticas e requisições de IA
     """
     analysis = get_analysis_by_id(analysis_id, db_path)
     if not analysis:
@@ -423,16 +361,12 @@ def get_full_analysis(analysis_id: int, db_path: str = DB_PATH) -> Optional[Dict
     }
 
 
-# ============================================
 # Funções de estatísticas
-# ============================================
 
 def get_analyses_stats(db_path: str = DB_PATH) -> Dict[str, Any]:
     """
     Retorna estatísticas do banco de dados.
-    
-    Returns:
-        Dicionário com estatísticas
+    retorna o dicionário com estatísticas
     """
     with get_db(db_path) as conn:
         cursor = conn.cursor()
