@@ -5,6 +5,9 @@ function Body(){
     const [response, setResponse] = useState(null)
     const [loading, setLoading] = useState(false)
 
+    var w = window.innerWidth
+    var tela = w - (w*0.9)
+
     const submit = async (e) => {
         e.preventDefault()
 
@@ -51,7 +54,7 @@ function Body(){
             <main id="body">
                 <div className="URL">
                     <form onSubmit={submit}>
-                        <input type="text" value={url} size={url.length} onChange={(e) => {
+                        <input type="text" value={url} size={Math.min(url.length, tela)} onChange={(e) => {
                             setURL(e.target.value)
                         }} placeholder="https://exemplo.com"/>
 

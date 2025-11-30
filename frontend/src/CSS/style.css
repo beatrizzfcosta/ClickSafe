@@ -1,22 +1,12 @@
 /*Estilo do site em geral*/
-/*html, body, #root{
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    text-align: center;
-    background-color: #F0E7D5 ;
-}*/
-
-/*Estilo do site em geral*/
 html, body {
     margin: 0;
     padding: 0;
-    height: 100%; /* Garante herança de altura */
+    height: 100%;
 }
 
-/* O #root e o contêiner principal */
+/* O #root e o conteiner principal */
 #root, .home {
-    /* CORREÇÃO CHAVE: min-height E display: flex */
     min-height: 100vh;
     width: 100%;
     display: flex;
@@ -90,6 +80,7 @@ input{
     min-height: 30px;
     text-align: center;
     color: #212842;
+    flex-grow: 1;
 }
 
 button{
