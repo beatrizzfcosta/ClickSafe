@@ -1,18 +1,17 @@
 """
 Servidor FastAPI para o ClickSafe - Versão para Rede Local.
 """
-from fastapi import FastAPI, HTTPException
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 import socket
 from pathlib import Path
 from storage.db import init_db, get_analysis_by_url, get_full_analysis, get_analyses_stats
 from app import analyze_url
-
-app = FastAPI(title="ClickSafe API - Network Mode", version="1.0.0")
 
 def get_local_ip():
     """Obtém o IP da máquina na rede local"""
@@ -28,6 +27,35 @@ def get_local_ip():
 
 LOCAL_IP = get_local_ip()
 
+# Configurar caminho do frontend buildado
+BACKEND_DIR = Path(__file__).parent
+FRONTEND_DIR = BACKEND_DIR.parent / "frontend"
+FRONTEND_DIST = FRONTEND_DIR / "dist"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager para inicializar o banco de dados"""
+    # Startup
+    init_db()
+    print(f"\n{'='*60}")
+    print(f"ClickSafe Server - Modo Rede Local")
+    print(f"{'='*60}")
+    print(f"IP Local: {LOCAL_IP}")
+    print(f"Porta: 8000")
+    print(f"Acesse em: http://{LOCAL_IP}:8000")
+    if FRONTEND_DIST.exists():
+        print(f"Frontend: http://{LOCAL_IP}:8000")
+    else:
+        print(f"Frontend: Não encontrado. Execute 'npm run build' no diretório frontend/")
+    print(f"API Docs: http://{LOCAL_IP}:8000/docs")
+    print(f"{'='*60}\n")
+    yield
+    # Shutdown (se necessário no futuro)
+
+
+app = FastAPI(title="ClickSafe API - Network Mode", version="1.0.0", lifespan=lifespan)
+
 # Permitir todas as origens (para desenvolvimento em rede local)
 # Em produção, você deve especificar as origens exatas
 app.add_middleware(
@@ -37,11 +65,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Configurar caminho do frontend buildado
-BACKEND_DIR = Path(__file__).parent
-FRONTEND_DIR = BACKEND_DIR.parent / "frontend"
-FRONTEND_DIST = FRONTEND_DIR / "dist"
 
 if FRONTEND_DIST.exists() and (FRONTEND_DIST / "index.html").exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
@@ -60,28 +83,13 @@ if FRONTEND_DIST.exists() and (FRONTEND_DIST / "index.html").exists():
             return FileResponse(file_path)
         return FileResponse(FRONTEND_DIST / "index.html")
 
-@app.on_event("startup")
-async def startup_event():
-    init_db()
-    print(f"\n{'='*60}")
-    print(f"ClickSafe Server - Modo Rede Local")
-    print(f"{'='*60}")
-    print(f"IP Local: {LOCAL_IP}")
-    print(f"Porta: 8000")
-    print(f"Acesse em: http://{LOCAL_IP}:8000")
-    if FRONTEND_DIST.exists():
-        print(f"Frontend: http://{LOCAL_IP}:8000")
-    else:
-        print(f"Frontend: Não encontrado. Execute 'npm run build' no diretório frontend/")
-    print(f"API Docs: http://{LOCAL_IP}:8000/docs")
-    print(f"{'='*60}\n")
-
-
 class URLRequest(BaseModel):
     url: str
 
 
 class URLResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")  # Permite campos extras do banco de dados
+    
     id: int
     url: str
     normalized_url: Optional[str] = None
@@ -90,23 +98,51 @@ class URLResponse(BaseModel):
     reputation_checks: list = []
     heuristic_hits: list = []
     ai_requests: list = []
-    
-    class Config:
-        extra = "ignore"
 
 
 @app.post("/api/analyze", response_model=URLResponse)
-async def analyze_url_endpoint(request: URLRequest):
+async def analyze_url_endpoint(request: URLRequest, http_request: Request):
     try:
+        print(f"\n[API] Recebida requisição para analisar: {request.url}")
+        print(f"[API] Origin: {http_request.headers.get('origin', 'N/A')}")
+        print(f"[API] User-Agent: {http_request.headers.get('user-agent', 'N/A')[:50]}...")
+        
         result = await analyze_url(request.url)
+        print(f"[API] Análise concluída. Preparando resposta...")
+        print(f"[API] Campos no resultado: {list(result.keys())}")
+        
+        # Mapear campos para o formato esperado
         if 'heuristics_hits' in result:
             result['heuristic_hits'] = result.pop('heuristics_hits')
         if 'normalized_url' not in result and 'url_normalized' in result:
             result['normalized_url'] = result.pop('url_normalized')
-        return URLResponse(**result)
+        
+        # Garantir que todos os campos obrigatórios existem
+        if 'heuristic_hits' not in result:
+            result['heuristic_hits'] = []
+        if 'reputation_checks' not in result:
+            result['reputation_checks'] = []
+        if 'ai_requests' not in result:
+            result['ai_requests'] = []
+        
+        # Remover campos extras que não estão no modelo (link_id, hostname, etc)
+        # Manter apenas os campos esperados pelo URLResponse
+        allowed_fields = {'id', 'url', 'normalized_url', 'score', 'explanation', 
+                         'reputation_checks', 'heuristic_hits', 'ai_requests'}
+        filtered_result = {k: v for k, v in result.items() if k in allowed_fields}
+        
+        print(f"[API] Retornando resposta com {len(filtered_result.get('heuristic_hits', []))} heurísticas")
+        print(f"[API] Campos filtrados: {list(filtered_result.keys())}")
+        response = URLResponse(**filtered_result)
+        print(f"[API] Resposta criada com sucesso")
+        return response
+    except HTTPException:
+        # Re-raise HTTP exceptions (já são erros HTTP apropriados)
+        raise
     except Exception as e:
         import traceback
         error_detail = f"Erro ao analisar URL: {str(e)}\n{traceback.format_exc()}"
+        print(f"\n[API] ERRO: {error_detail}")
         raise HTTPException(status_code=500, detail=error_detail)
 
 

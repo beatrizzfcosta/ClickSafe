@@ -26,8 +26,29 @@ function Body(){
         }
 
         try{
-            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-            const result = await fetch(`${apiUrl}/api/analyze`, {
+            // Detecta se está em modo desenvolvimento (Vite dev server) ou produção (servido pelo backend)
+            const isDevelopment = window.location.origin.includes('localhost:5173') || 
+                                 window.location.origin.includes('localhost:3000') ||
+                                 import.meta.env.DEV;
+            
+            // Se está em desenvolvimento, usa URL completa da API
+            // Se está em produção (servido pelo backend), usa URL relativa
+            let apiEndpoint;
+            if (isDevelopment) {
+                // Modo desenvolvimento: frontend e backend rodam separadamente
+                const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+                apiEndpoint = `${apiUrl}/api/analyze`;
+            } else {
+                // Modo produção: frontend servido pelo mesmo servidor
+                apiEndpoint = '/api/analyze';
+            }
+            
+            console.log('[Frontend] Enviando requisição para:', apiEndpoint);
+            console.log('[Frontend] URL a analisar:', urlToSend);
+            console.log('[Frontend] Origin atual:', window.location.origin);
+            console.log('[Frontend] Modo desenvolvimento:', isDevelopment);
+            
+            const result = await fetch(apiEndpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -42,7 +63,18 @@ function Body(){
             const data = await result.json()
             setResponse(data)
         } catch (e){
-            setResponse({error: `Problema no servidor: ${e.message}`})
+            console.error('[Frontend] Erro:', e);
+            let errorMessage = `Problema no servidor: ${e.message}`;
+            
+            // Mensagens mais específicas para diferentes tipos de erro
+            const currentApiUrl = import.meta.env.VITE_API_URL || window.location.origin || 'http://localhost:8000';
+            if (e.message.includes('Failed to fetch') || e.message.includes('ERR_CONNECTION_TIMED_OUT')) {
+                errorMessage = `Não foi possível conectar ao servidor. Verifique se o servidor está rodando em ${currentApiUrl}`;
+            } else if (e.message.includes('NetworkError')) {
+                errorMessage = 'Erro de rede. Verifique sua conexão e se o servidor está acessível.';
+            }
+            
+            setResponse({error: errorMessage})
         } finally {
             setLoading(false)
         }

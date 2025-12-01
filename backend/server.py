@@ -1,15 +1,26 @@
 """
 Servidor FastAPI para o ClickSafe - API REST para análise de URLs.
 """
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 import asyncio
 from storage.db import init_db
 from app import analyze_url
 
-app = FastAPI(title="ClickSafe API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager para inicializar o banco de dados"""
+    # Startup
+    init_db()
+    yield
+    # Shutdown (se necessário no futuro)
+
+
+app = FastAPI(title="ClickSafe API", version="1.0.0", lifespan=lifespan)
 
 # Configurar CORS para permitir requisições do frontend
 app.add_middleware(
@@ -20,17 +31,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Inicializar banco de dados na startup
-@app.on_event("startup")
-async def startup_event():
-    init_db()
-
 
 class URLRequest(BaseModel):
     url: str
 
 
 class URLResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")  # Permite campos extras do banco de dados
+    
     id: int
     url: str
     normalized_url: Optional[str] = None
@@ -39,10 +47,6 @@ class URLResponse(BaseModel):
     reputation_checks: list = []
     heuristic_hits: list = []
     ai_requests: list = []
-    
-    class Config:
-        # Permite campos extras do banco de dados
-        extra = "ignore"
 
 
 @app.post("/api/analyze", response_model=URLResponse)
